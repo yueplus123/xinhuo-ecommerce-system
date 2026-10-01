@@ -27,7 +27,6 @@ export const NO_RESET_WHITE_LIST = [
   'Login',
   'NoFind',
   'Root',
-  'SalarySlipPublic',
   'DataScreenAlias'
 ]
 
