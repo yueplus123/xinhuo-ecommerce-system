@@ -13,7 +13,8 @@ from backend.apps.catalog.ledger_utils import (
     sync_ledger_status_fields,
 )
 
-from .wechat_bot_push import _api_key_ok, _parse_dt
+from .api_key import api_key_ok
+from .wechat_bot_push import _parse_dt
 
 
 def _ensure_business_for_project(name: str) -> LedgerBusiness:
@@ -269,6 +270,3 @@ def ingest_ledger_push_payload(body) -> dict:
     r = ingest_ledger_push_item(body)
     return {"ok": True, "mode": "single", **r}
 
-
-def api_key_ok(request) -> bool:
-    return _api_key_ok(request)

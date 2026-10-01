@@ -71,17 +71,6 @@ def _payment_records_net_sales_sum(qs):
     return qs.aggregate(s=Sum(_net_amount_expr()))["s"]
 
 
-def _day_range_bounds(date_from: date, date_to: date):
-    """周期起止（含整天），按当前时区。"""
-    start = datetime.combine(date_from, datetime.min.time())
-    end = datetime.combine(date_to, datetime.max.time())
-    if timezone.is_naive(start):
-        start = timezone.make_aware(start, timezone.get_current_timezone())
-    if timezone.is_naive(end):
-        end = timezone.make_aware(end, timezone.get_current_timezone())
-    return start, end
-
-
 def _bot_period_qs(date_from: date | None, date_to: date | None):
     """周期内有效微信BOT记录（含未清空），按上海日历日，与收款 record_date 同一套周期。"""
     qs = WechatBotRecord.objects.all()

@@ -2,26 +2,9 @@
 
 from __future__ import annotations
 
-from django.conf import settings
 from django.db.models import Q
 
 from backend.apps.catalog.models import Platform, SKU
-
-
-def api_key_ok(request) -> bool:
-    expected = (getattr(settings, "EXTERNAL_PUSH_API_KEY", "") or "").strip()
-    if not expected:
-        return False
-    got = (
-        (request.headers.get("X-Api-Key") or "")
-        or (request.META.get("HTTP_X_API_KEY") or "")
-        or ""
-    ).strip()
-    if not got:
-        auth = (request.headers.get("Authorization") or "").strip()
-        if auth.lower().startswith("bearer "):
-            got = auth[7:].strip()
-    return bool(got) and got == expected
 
 
 def query_bot_products(

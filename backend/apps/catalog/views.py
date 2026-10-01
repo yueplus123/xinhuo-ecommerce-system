@@ -186,10 +186,6 @@ def _resource_pool_tab_for_view(view_name: str) -> str:
     return ""
 
 
-def _tutorial_phrase_tab_for_view(view_name: str) -> str:
-    return _resource_pool_tab_for_view(view_name)
-
-
 BACKOFFICE_SECTIONS = {
     "product": {
         "aria_label": "商品管理",
@@ -408,15 +404,6 @@ def platform_tags_cell(platform):
     return format_html('<span class="bb-tag-pill-list">{}</span>', mark_safe("".join(str(p) for p in pills)))
 
 
-def sku_editor_link(obj_id):
-    return format_html(
-        '<a class="bb-btn bb-btn-primary" href="{}">编辑</a> '
-        '<a class="bb-btn bb-btn-danger" href="{}">删除</a>',
-        reverse("backoffice:sku_editor", args=[obj_id]),
-        reverse("backoffice:sku_delete", args=[obj_id]),
-    )
-
-
 def _workbench_url_for_platform(platform_id):
     return reverse("backoffice:platform_workbench", args=[platform_id])
 
@@ -427,18 +414,6 @@ def _workbench_url_for_business(business):
 
 def _workbench_url_for_sku(sku):
     return _workbench_url_for_platform(sku.business.platform_id)
-
-
-def _append_phrase_pool_items(sku, pools):
-    existing = set(sku.quick_phrases.values_list("content", flat=True))
-    max_order = sku.quick_phrases.aggregate(m=Max("order"))["m"] or 0
-    for pool in pools or []:
-        content = (pool.content or "").strip()
-        if not content or content in existing:
-            continue
-        max_order += 10
-        QuickPhrase.objects.create(sku=sku, content=content, order=max_order)
-        existing.add(content)
 
 
 def _sync_legacy_price(sku):
@@ -808,8 +783,8 @@ def sku_editor_add(request):
     return _render_sku_editor(request, SKU(), is_create=True)
 
 
-def _reorder_by_sort_ids(request, model):
-    """Parse JSON ``{order: [id, ...]}`` and set ``model.sort_order`` by index (0-based)."""
+def _reorder_by_sort_ids(request, model, field="sort_order"):
+    """Parse JSON ``{order: [id, ...]}`` and set ``model.<field>`` by index (0-based)."""
     try:
         payload = json.loads(request.body.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -828,31 +803,7 @@ def _reorder_by_sort_ids(request, model):
         return JsonResponse({"ok": False, "error": "列表与服务器不一致，请刷新页面"}, status=400)
     with transaction.atomic():
         for i, pk in enumerate(ids):
-            model.objects.filter(pk=pk).update(sort_order=i)
-    return JsonResponse({"ok": True})
-
-
-def _reorder_by_order_field(request, model):
-    """Parse JSON ``{order: [id, ...]}`` and set ``model.order`` by index (0-based)."""
-    try:
-        payload = json.loads(request.body.decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return JsonResponse({"ok": False, "error": "无效的 JSON"}, status=400)
-    order = payload.get("order")
-    if not isinstance(order, list) or not order:
-        return JsonResponse({"ok": False, "error": "缺少排序列表"}, status=400)
-    ids = []
-    for x in order:
-        try:
-            ids.append(int(x))
-        except (TypeError, ValueError):
-            return JsonResponse({"ok": False, "error": "无效的 ID"}, status=400)
-    existing = set(model.objects.values_list("id", flat=True))
-    if set(ids) != existing or len(ids) != len(existing):
-        return JsonResponse({"ok": False, "error": "列表与服务器不一致，请刷新页面"}, status=400)
-    with transaction.atomic():
-        for i, pk in enumerate(ids):
-            model.objects.filter(pk=pk).update(order=i)
+            model.objects.filter(pk=pk).update(**{field: i})
     return JsonResponse({"ok": True})
 
 
@@ -872,30 +823,6 @@ def payment_tutorial_reorder(request):
 @require_http_methods(["POST"])
 def platform_account_reorder(request):
     return _reorder_by_sort_ids(request, PlatformAccount)
-
-
-@superuser_required
-@require_http_methods(["POST"])
-def shared_apple_id_page_reorder(request):
-    return _reorder_by_sort_ids(request, SharedAppleIDPage)
-
-
-@superuser_required
-@require_http_methods(["POST"])
-def pict_cart_page_reorder(request):
-    return _reorder_by_sort_ids(request, PictCartPage)
-
-
-@superuser_required
-@require_http_methods(["POST"])
-def fanbox_stats_page_reorder(request):
-    return _reorder_by_sort_ids(request, FanboxStatsPage)
-
-
-@superuser_required
-@require_http_methods(["POST"])
-def service_monitor_page_reorder(request):
-    return _reorder_by_sort_ids(request, ServiceMonitorPage)
 
 
 @superuser_required
@@ -1113,354 +1040,178 @@ def payment_tutorial_delete(request, pk):
     return render_delete(request, "AAA图文远程", obj.name, reverse("backoffice:payment_tutorial_list"))
 
 
-@ensure_csrf_cookie
-@superuser_required
-def shared_apple_id_page_list(request):
-    rows = []
-    drag = mark_safe('<span class="bb-drag-handle" title="拖动排序">⋮⋮</span>')
-    for obj in SharedAppleIDPage.objects.all().order_by("sort_order", "id"):
-        rows.append(
-            {
-                "sort_id": obj.pk,
-                "cells": [
-                    drag,
-                    escape(obj.name),
-                    format_html('<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>', obj.share_url, escape(obj.share_url)),
-                    "启用" if obj.is_active else "停用",
-                    action_links("backoffice:shared_apple_id_page_edit", "backoffice:shared_apple_id_page_delete", obj.pk),
-                ],
-            }
+def _make_link_page_views(*, prefix, model, form_class, noun, list_title, list_subtitle, link_header,
+                          create_label, add_title, add_subtitle, edit_title, edit_subtitle):
+    """同构的「名称 + 外链 + 启用 + 拖动排序」后台页面：生成 list/add/edit/delete/reorder 五个视图。"""
+
+    def url(action, *args):
+        return reverse(f"backoffice:{prefix}_{action}", args=args or None)
+
+    @ensure_csrf_cookie
+    @superuser_required
+    def list_view(request):
+        rows = []
+        drag = mark_safe('<span class="bb-drag-handle" title="拖动排序">⋮⋮</span>')
+        for obj in model.objects.all().order_by("sort_order", "id"):
+            rows.append(
+                {
+                    "sort_id": obj.pk,
+                    "cells": [
+                        drag,
+                        escape(obj.name),
+                        format_html(
+                            '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
+                            obj.share_url,
+                            escape(obj.share_url),
+                        ),
+                        "启用" if obj.is_active else "停用",
+                        action_links(f"backoffice:{prefix}_edit", f"backoffice:{prefix}_delete", obj.pk),
+                    ],
+                }
+            )
+        return render_list(
+            request,
+            list_title,
+            list_subtitle,
+            ["排序", "页面名称", link_header, "状态", "操作"],
+            rows,
+            create_url=url("add"),
+            create_label=create_label,
+            sortable_reorder_url=url("reorder"),
         )
-    return render_list(
-        request,
-        "共享苹果ID分享页管理",
-        "维护前端「共享苹果ID」页展示的分享链接；拖动左侧「⋮⋮」可调整展示顺序。",
-        ["排序", "页面名称", "分享页链接", "状态", "操作"],
-        rows,
-        create_url=reverse("backoffice:shared_apple_id_page_add"),
-        create_label="新增分享页",
-        sortable_reorder_url=reverse("backoffice:shared_apple_id_page_reorder"),
-    )
 
+    @superuser_required
+    @require_http_methods(["GET", "POST"])
+    def add_view(request):
+        form = form_class(request.POST or None)
+        if request.method == "POST" and form.is_valid():
+            obj = form.save()
+            max_o = model.objects.exclude(pk=obj.pk).aggregate(m=Max("sort_order"))["m"] or 0
+            obj.sort_order = max_o + 1
+            obj.save(update_fields=["sort_order"])
+            messages.success(request, f"{noun}已创建。")
+            return redirect(f"backoffice:{prefix}_edit", pk=obj.pk)
+        return render_form(request, add_title, add_subtitle, form, url("list"))
 
-@superuser_required
-@require_http_methods(["GET", "POST"])
-def shared_apple_id_page_add(request):
-    form = SharedAppleIDPageForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        obj = form.save()
-        max_o = SharedAppleIDPage.objects.exclude(pk=obj.pk).aggregate(m=Max("sort_order"))["m"] or 0
-        obj.sort_order = max_o + 1
-        obj.save(update_fields=["sort_order"])
-        messages.success(request, "共享苹果ID分享页已创建。")
-        return redirect("backoffice:shared_apple_id_page_edit", pk=obj.pk)
-    return render_form(
-        request,
-        "新增共享苹果ID分享页",
-        "填写页面名称和分享页链接。",
-        form,
-        reverse("backoffice:shared_apple_id_page_list"),
-    )
-
-
-@superuser_required
-@require_http_methods(["GET", "POST"])
-def shared_apple_id_page_edit(request, pk):
-    obj = get_object_or_404(SharedAppleIDPage, pk=pk)
-    form = SharedAppleIDPageForm(request.POST or None, instance=obj)
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "共享苹果ID分享页已更新。")
-        return redirect("backoffice:shared_apple_id_page_edit", pk=obj.pk)
-    return render_form(
-        request,
-        "编辑共享苹果ID分享页",
-        "保存后前端「共享苹果ID」页将显示最新链接。",
-        form,
-        reverse("backoffice:shared_apple_id_page_list"),
-        delete_url=reverse("backoffice:shared_apple_id_page_delete", args=[obj.pk]),
-    )
-
-
-@superuser_required
-@require_http_methods(["GET", "POST"])
-def shared_apple_id_page_delete(request, pk):
-    obj = get_object_or_404(SharedAppleIDPage, pk=pk)
-    if request.method == "POST":
-        obj.delete()
-        messages.success(request, "共享苹果ID分享页已删除。")
-        return redirect("backoffice:shared_apple_id_page_list")
-    return render_delete(request, "共享苹果ID分享页", obj.name, reverse("backoffice:shared_apple_id_page_list"))
-
-
-@ensure_csrf_cookie
-@superuser_required
-def pict_cart_page_list(request):
-    rows = []
-    drag = mark_safe('<span class="bb-drag-handle" title="拖动排序">⋮⋮</span>')
-    for obj in PictCartPage.objects.all().order_by("sort_order", "id"):
-        rows.append(
-            {
-                "sort_id": obj.pk,
-                "cells": [
-                    drag,
-                    escape(obj.name),
-                    format_html(
-                        '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
-                        obj.share_url,
-                        escape(obj.share_url),
-                    ),
-                    "启用" if obj.is_active else "停用",
-                    action_links("backoffice:pict_cart_page_edit", "backoffice:pict_cart_page_delete", obj.pk),
-                ],
-            }
+    @superuser_required
+    @require_http_methods(["GET", "POST"])
+    def edit_view(request, pk):
+        obj = get_object_or_404(model, pk=pk)
+        form = form_class(request.POST or None, instance=obj)
+        if request.method == "POST" and form.is_valid():
+            form.save()
+            messages.success(request, f"{noun}已更新。")
+            return redirect(f"backoffice:{prefix}_edit", pk=obj.pk)
+        return render_form(
+            request, edit_title, edit_subtitle, form, url("list"), delete_url=url("delete", obj.pk)
         )
-    return render_list(
-        request,
-        "pict加购物车页面管理",
-        "维护前端「pict加购物车」页展示的外链；拖动左侧「⋮⋮」可调整展示顺序。",
-        ["排序", "页面名称", "页面链接", "状态", "操作"],
-        rows,
-        create_url=reverse("backoffice:pict_cart_page_add"),
-        create_label="新增页面",
-        sortable_reorder_url=reverse("backoffice:pict_cart_page_reorder"),
-    )
+
+    @superuser_required
+    @require_http_methods(["GET", "POST"])
+    def delete_view(request, pk):
+        obj = get_object_or_404(model, pk=pk)
+        if request.method == "POST":
+            obj.delete()
+            messages.success(request, f"{noun}已删除。")
+            return redirect(f"backoffice:{prefix}_list")
+        return render_delete(request, noun, obj.name, url("list"))
+
+    @superuser_required
+    @require_http_methods(["POST"])
+    def reorder_view(request):
+        return _reorder_by_sort_ids(request, model)
+
+    for action, fn in (
+        ("list", list_view), ("add", add_view), ("edit", edit_view),
+        ("delete", delete_view), ("reorder", reorder_view),
+    ):
+        fn.__name__ = fn.__qualname__ = f"{prefix}_{action}"
+    return list_view, add_view, edit_view, delete_view, reorder_view
 
 
-@superuser_required
-@require_http_methods(["GET", "POST"])
-def pict_cart_page_add(request):
-    form = PictCartPageForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        obj = form.save()
-        max_o = PictCartPage.objects.exclude(pk=obj.pk).aggregate(m=Max("sort_order"))["m"] or 0
-        obj.sort_order = max_o + 1
-        obj.save(update_fields=["sort_order"])
-        messages.success(request, "pict加购物车页面已创建。")
-        return redirect("backoffice:pict_cart_page_edit", pk=obj.pk)
-    return render_form(
-        request,
-        "新增 pict加购物车页面",
-        "填写页面名称和链接，前端将以嵌入方式展示。",
-        form,
-        reverse("backoffice:pict_cart_page_list"),
-    )
+(
+    shared_apple_id_page_list,
+    shared_apple_id_page_add,
+    shared_apple_id_page_edit,
+    shared_apple_id_page_delete,
+    shared_apple_id_page_reorder,
+) = _make_link_page_views(
+    prefix="shared_apple_id_page",
+    model=SharedAppleIDPage,
+    form_class=SharedAppleIDPageForm,
+    noun="共享苹果ID分享页",
+    list_title="共享苹果ID分享页管理",
+    list_subtitle="维护前端「共享苹果ID」页展示的分享链接；拖动左侧「⋮⋮」可调整展示顺序。",
+    link_header="分享页链接",
+    create_label="新增分享页",
+    add_title="新增共享苹果ID分享页",
+    add_subtitle="填写页面名称和分享页链接。",
+    edit_title="编辑共享苹果ID分享页",
+    edit_subtitle="保存后前端「共享苹果ID」页将显示最新链接。",
+)
 
+(
+    pict_cart_page_list,
+    pict_cart_page_add,
+    pict_cart_page_edit,
+    pict_cart_page_delete,
+    pict_cart_page_reorder,
+) = _make_link_page_views(
+    prefix="pict_cart_page",
+    model=PictCartPage,
+    form_class=PictCartPageForm,
+    noun="pict加购物车页面",
+    list_title="pict加购物车页面管理",
+    list_subtitle="维护前端「pict加购物车」页展示的外链；拖动左侧「⋮⋮」可调整展示顺序。",
+    link_header="页面链接",
+    create_label="新增页面",
+    add_title="新增 pict加购物车页面",
+    add_subtitle="填写页面名称和链接，前端将以嵌入方式展示。",
+    edit_title="编辑 pict加购物车页面",
+    edit_subtitle="保存后前端「pict加购物车」页将显示最新链接。",
+)
 
-@superuser_required
-@require_http_methods(["GET", "POST"])
-def pict_cart_page_edit(request, pk):
-    obj = get_object_or_404(PictCartPage, pk=pk)
-    form = PictCartPageForm(request.POST or None, instance=obj)
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "pict加购物车页面已更新。")
-        return redirect("backoffice:pict_cart_page_edit", pk=obj.pk)
-    return render_form(
-        request,
-        "编辑 pict加购物车页面",
-        "保存后前端「pict加购物车」页将显示最新链接。",
-        form,
-        reverse("backoffice:pict_cart_page_list"),
-        delete_url=reverse("backoffice:pict_cart_page_delete", args=[obj.pk]),
-    )
+(
+    fanbox_stats_page_list,
+    fanbox_stats_page_add,
+    fanbox_stats_page_edit,
+    fanbox_stats_page_delete,
+    fanbox_stats_page_reorder,
+) = _make_link_page_views(
+    prefix="fanbox_stats_page",
+    model=FanboxStatsPage,
+    form_class=FanboxStatsPageForm,
+    noun="fanbox投稿作品统计页面",
+    list_title="fanbox投稿作品统计管理",
+    list_subtitle="维护前端「fanbox投稿作品统计」页展示的外链；拖动左侧「⋮⋮」可调整展示顺序。",
+    link_header="页面链接",
+    create_label="新增页面",
+    add_title="新增 fanbox投稿作品统计页面",
+    add_subtitle="填写页面名称和链接，前端将以嵌入方式展示。",
+    edit_title="编辑 fanbox投稿作品统计页面",
+    edit_subtitle="保存后前端「fanbox投稿作品统计」页将显示最新链接。",
+)
 
-
-@superuser_required
-@require_http_methods(["GET", "POST"])
-def pict_cart_page_delete(request, pk):
-    obj = get_object_or_404(PictCartPage, pk=pk)
-    if request.method == "POST":
-        obj.delete()
-        messages.success(request, "pict加购物车页面已删除。")
-        return redirect("backoffice:pict_cart_page_list")
-    return render_delete(request, "pict加购物车页面", obj.name, reverse("backoffice:pict_cart_page_list"))
-
-
-@ensure_csrf_cookie
-@superuser_required
-def fanbox_stats_page_list(request):
-    rows = []
-    drag = mark_safe('<span class="bb-drag-handle" title="拖动排序">⋮⋮</span>')
-    for obj in FanboxStatsPage.objects.all().order_by("sort_order", "id"):
-        rows.append(
-            {
-                "sort_id": obj.pk,
-                "cells": [
-                    drag,
-                    escape(obj.name),
-                    format_html(
-                        '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
-                        obj.share_url,
-                        escape(obj.share_url),
-                    ),
-                    "启用" if obj.is_active else "停用",
-                    action_links(
-                        "backoffice:fanbox_stats_page_edit",
-                        "backoffice:fanbox_stats_page_delete",
-                        obj.pk,
-                    ),
-                ],
-            }
-        )
-    return render_list(
-        request,
-        "fanbox投稿作品统计管理",
-        "维护前端「fanbox投稿作品统计」页展示的外链；拖动左侧「⋮⋮」可调整展示顺序。",
-        ["排序", "页面名称", "页面链接", "状态", "操作"],
-        rows,
-        create_url=reverse("backoffice:fanbox_stats_page_add"),
-        create_label="新增页面",
-        sortable_reorder_url=reverse("backoffice:fanbox_stats_page_reorder"),
-    )
-
-
-@superuser_required
-@require_http_methods(["GET", "POST"])
-def fanbox_stats_page_add(request):
-    form = FanboxStatsPageForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        obj = form.save()
-        max_o = FanboxStatsPage.objects.exclude(pk=obj.pk).aggregate(m=Max("sort_order"))["m"] or 0
-        obj.sort_order = max_o + 1
-        obj.save(update_fields=["sort_order"])
-        messages.success(request, "fanbox投稿作品统计页面已创建。")
-        return redirect("backoffice:fanbox_stats_page_edit", pk=obj.pk)
-    return render_form(
-        request,
-        "新增 fanbox投稿作品统计页面",
-        "填写页面名称和链接，前端将以嵌入方式展示。",
-        form,
-        reverse("backoffice:fanbox_stats_page_list"),
-    )
-
-
-@superuser_required
-@require_http_methods(["GET", "POST"])
-def fanbox_stats_page_edit(request, pk):
-    obj = get_object_or_404(FanboxStatsPage, pk=pk)
-    form = FanboxStatsPageForm(request.POST or None, instance=obj)
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "fanbox投稿作品统计页面已更新。")
-        return redirect("backoffice:fanbox_stats_page_edit", pk=obj.pk)
-    return render_form(
-        request,
-        "编辑 fanbox投稿作品统计页面",
-        "保存后前端「fanbox投稿作品统计」页将显示最新链接。",
-        form,
-        reverse("backoffice:fanbox_stats_page_list"),
-        delete_url=reverse("backoffice:fanbox_stats_page_delete", args=[obj.pk]),
-    )
-
-
-@superuser_required
-@require_http_methods(["GET", "POST"])
-def fanbox_stats_page_delete(request, pk):
-    obj = get_object_or_404(FanboxStatsPage, pk=pk)
-    if request.method == "POST":
-        obj.delete()
-        messages.success(request, "fanbox投稿作品统计页面已删除。")
-        return redirect("backoffice:fanbox_stats_page_list")
-    return render_delete(
-        request,
-        "fanbox投稿作品统计页面",
-        obj.name,
-        reverse("backoffice:fanbox_stats_page_list"),
-    )
-
-
-@ensure_csrf_cookie
-@superuser_required
-def service_monitor_page_list(request):
-    rows = []
-    drag = mark_safe('<span class="bb-drag-handle" title="拖动排序">⋮⋮</span>')
-    for obj in ServiceMonitorPage.objects.all().order_by("sort_order", "id"):
-        rows.append(
-            {
-                "sort_id": obj.pk,
-                "cells": [
-                    drag,
-                    escape(obj.name),
-                    format_html(
-                        '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
-                        obj.share_url,
-                        escape(obj.share_url),
-                    ),
-                    "启用" if obj.is_active else "停用",
-                    action_links(
-                        "backoffice:service_monitor_page_edit",
-                        "backoffice:service_monitor_page_delete",
-                        obj.pk,
-                    ),
-                ],
-            }
-        )
-    return render_list(
-        request,
-        "服务监控页面管理",
-        "维护前端「服务监控」页嵌入的 Uptime Kuma / 状态页链接；拖动左侧「⋮⋮」可调整展示顺序。",
-        ["排序", "页面名称", "页面链接", "状态", "操作"],
-        rows,
-        create_url=reverse("backoffice:service_monitor_page_add"),
-        create_label="新增页面",
-        sortable_reorder_url=reverse("backoffice:service_monitor_page_reorder"),
-    )
-
-
-@superuser_required
-@require_http_methods(["GET", "POST"])
-def service_monitor_page_add(request):
-    form = ServiceMonitorPageForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        obj = form.save()
-        max_o = ServiceMonitorPage.objects.exclude(pk=obj.pk).aggregate(m=Max("sort_order"))["m"] or 0
-        obj.sort_order = max_o + 1
-        obj.save(update_fields=["sort_order"])
-        messages.success(request, "服务监控页面已创建。")
-        return redirect("backoffice:service_monitor_page_edit", pk=obj.pk)
-    return render_form(
-        request,
-        "新增服务监控页面",
-        "填写页面名称和 Uptime Kuma 访问链接，前端将以嵌入方式展示。",
-        form,
-        reverse("backoffice:service_monitor_page_list"),
-    )
-
-
-@superuser_required
-@require_http_methods(["GET", "POST"])
-def service_monitor_page_edit(request, pk):
-    obj = get_object_or_404(ServiceMonitorPage, pk=pk)
-    form = ServiceMonitorPageForm(request.POST or None, instance=obj)
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "服务监控页面已更新。")
-        return redirect("backoffice:service_monitor_page_edit", pk=obj.pk)
-    return render_form(
-        request,
-        "编辑服务监控页面",
-        "保存后前端「服务监控」页将显示最新链接。",
-        form,
-        reverse("backoffice:service_monitor_page_list"),
-        delete_url=reverse("backoffice:service_monitor_page_delete", args=[obj.pk]),
-    )
-
-
-@superuser_required
-@require_http_methods(["GET", "POST"])
-def service_monitor_page_delete(request, pk):
-    obj = get_object_or_404(ServiceMonitorPage, pk=pk)
-    if request.method == "POST":
-        obj.delete()
-        messages.success(request, "服务监控页面已删除。")
-        return redirect("backoffice:service_monitor_page_list")
-    return render_delete(
-        request,
-        "服务监控页面",
-        obj.name,
-        reverse("backoffice:service_monitor_page_list"),
-    )
+(
+    service_monitor_page_list,
+    service_monitor_page_add,
+    service_monitor_page_edit,
+    service_monitor_page_delete,
+    service_monitor_page_reorder,
+) = _make_link_page_views(
+    prefix="service_monitor_page",
+    model=ServiceMonitorPage,
+    form_class=ServiceMonitorPageForm,
+    noun="服务监控页面",
+    list_title="服务监控页面管理",
+    list_subtitle="维护前端「服务监控」页嵌入的 Uptime Kuma / 状态页链接；拖动左侧「⋮⋮」可调整展示顺序。",
+    link_header="页面链接",
+    create_label="新增页面",
+    add_title="新增服务监控页面",
+    add_subtitle="填写页面名称和 Uptime Kuma 访问链接，前端将以嵌入方式展示。",
+    edit_title="编辑服务监控页面",
+    edit_subtitle="保存后前端「服务监控」页将显示最新链接。",
+)
 
 
 @ensure_csrf_cookie
@@ -1669,7 +1420,7 @@ def platform_tag_pool_list(request):
 @superuser_required
 @require_http_methods(["POST"])
 def platform_tag_pool_reorder(request):
-    return _reorder_by_order_field(request, PlatformTagPool)
+    return _reorder_by_sort_ids(request, PlatformTagPool, "order")
 
 
 @superuser_required
@@ -1773,7 +1524,7 @@ def channel_tag_pool_list(request):
 @superuser_required
 @require_http_methods(["POST"])
 def channel_tag_pool_reorder(request):
-    return _reorder_by_order_field(request, ChannelTagPool)
+    return _reorder_by_sort_ids(request, ChannelTagPool, "order")
 
 
 @superuser_required

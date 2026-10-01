@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from .api_key import api_key_ok, configured_api_key
 from backend.apps.catalog.payment_records import (
     filtered_payment_records_api_qs,
     payment_records_xlsx_response,
@@ -635,16 +636,14 @@ class ExternalPaymentPushAPIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        from .external_payment_push import _api_key_ok
-
-        if not _api_key_ok(request):
+        if not api_key_ok(request):
             return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
         return Response({"ok": True, "service": "external-payment-push"})
 
     def post(self, request):
-        from .external_payment_push import _api_key_ok, ingest_push_payload
+        from .external_payment_push import ingest_push_payload
 
-        if not _api_key_ok(request):
+        if not api_key_ok(request):
             return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
         try:
             result = ingest_push_payload(request.data)
@@ -663,7 +662,7 @@ class ExternalBotProductQueryAPIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        from .bot_product_query import api_key_ok, format_bot_product_reply, query_bot_products
+        from .bot_product_query import format_bot_product_reply, query_bot_products
 
         if not api_key_ok(request):
             return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
@@ -687,7 +686,7 @@ class ExternalBotProductQueryAPIView(APIView):
 
     def post(self, request):
         """兼容 BOT 用 POST body：{"q":"关键词"}。"""
-        from .bot_product_query import api_key_ok, format_bot_product_reply, query_bot_products
+        from .bot_product_query import format_bot_product_reply, query_bot_products
 
         if not api_key_ok(request):
             return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
@@ -724,10 +723,6 @@ class ExternalBridgeHealthAPIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        from django.conf import settings as dj_settings
-
-        from .bot_product_query import api_key_ok
-
         key_ok = api_key_ok(request)
         if not key_ok:
             return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
@@ -759,9 +754,7 @@ class ExternalBridgeHealthAPIView(APIView):
                 "ok": True,
                 "service": "xinhuo",
                 "bridge": "xinhuo-bridge",
-                "api_key_configured": bool(
-                    (getattr(dj_settings, "EXTERNAL_PUSH_API_KEY", "") or "").strip()
-                ),
+                "api_key_configured": bool(configured_api_key()),
                 "capabilities": capabilities,
             }
         )
@@ -774,16 +767,14 @@ class ExternalWechatBotPushAPIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        from .wechat_bot_push import _api_key_ok
-
-        if not _api_key_ok(request):
+        if not api_key_ok(request):
             return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
         return Response({"ok": True, "service": "external-wechat-bot-push"})
 
     def post(self, request):
-        from .wechat_bot_push import _api_key_ok, ingest_wechat_bot_payload
+        from .wechat_bot_push import ingest_wechat_bot_payload
 
-        if not _api_key_ok(request):
+        if not api_key_ok(request):
             return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
         try:
             result = ingest_wechat_bot_payload(request.data)
@@ -801,14 +792,12 @@ class ExternalLedgerPushAPIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        from .ledger_push import api_key_ok
-
         if not api_key_ok(request):
             return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
         return Response({"ok": True, "service": "external-ledger-push"})
 
     def post(self, request):
-        from .ledger_push import api_key_ok, ingest_ledger_push_payload
+        from .ledger_push import ingest_ledger_push_payload
 
         if not api_key_ok(request):
             return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)

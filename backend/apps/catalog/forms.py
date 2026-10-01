@@ -191,38 +191,6 @@ class ChannelTagPoolQuickForm(forms.ModelForm):
         return obj
 
 
-class PlatformTagQuickForm(forms.ModelForm):
-    """@deprecated 使用 PlatformTagPoolForm"""
-
-    class Meta:
-        model = Tag
-        fields = ("name", "order")
-        labels = {"name": "名称", "order": "排序"}
-
-    def save(self, commit=True):
-        obj = super().save(commit=False)
-        obj.type = Tag.TYPE_PLATFORM
-        if commit:
-            obj.save()
-        return obj
-
-
-class ChannelTagQuickForm(forms.ModelForm):
-    """@deprecated 使用 ChannelTagPoolForm"""
-
-    class Meta:
-        model = Tag
-        fields = ("name", "order")
-        labels = {"name": "名称", "order": "排序"}
-
-    def save(self, commit=True):
-        obj = super().save(commit=False)
-        obj.type = Tag.TYPE_CHANNEL
-        if commit:
-            obj.save()
-        return obj
-
-
 class PlatformAccountForm(forms.ModelForm):
     url = forms.CharField(required=False)
 
@@ -396,35 +364,6 @@ class PlatformListFilterForm(forms.Form):
         self.fields["platform"].queryset = Platform.objects.all().order_by("sort_order", "id")
         self.fields["q"].widget.attrs.update({"placeholder": "搜索平台名称/网址/备注/标签"})
 
-
-class BusinessListFilterForm(forms.Form):
-    platform = forms.ModelChoiceField(
-        label="平台",
-        queryset=Platform.objects.none(),
-        required=False,
-        empty_label="全部平台",
-    )
-    q = forms.CharField(label="搜索", required=False)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["platform"].queryset = Platform.objects.all().order_by("sort_order", "id")
-        self.fields["q"].widget.attrs.update({"placeholder": "搜索业务名/描述"})
-
-
-class SKUListFilterForm(forms.Form):
-    platform = forms.ModelChoiceField(
-        label="平台",
-        queryset=Platform.objects.none(),
-        required=False,
-        empty_label="全部平台",
-    )
-    q = forms.CharField(label="搜索", required=False)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["platform"].queryset = Platform.objects.all().order_by("sort_order", "id")
-        self.fields["q"].widget.attrs.update({"placeholder": "搜索SKU/业务/备注/教程"})
 
 class PaymentRecordAdminForm(forms.ModelForm):
     class Meta:

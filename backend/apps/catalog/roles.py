@@ -39,16 +39,3 @@ def is_guest(user) -> bool:
         return False
     return user.groups.filter(name=GUEST_GROUP_NAME).exists()
 
-
-def is_employee(user) -> bool:
-    """职员端「员工」：已开通职员权限，且非管理员、非老板、非 CEO、非游客。"""
-    if not user or not getattr(user, "is_authenticated", False) or not user.is_authenticated:
-        return False
-    return bool(
-        user.is_staff
-        and user.is_active
-        and not user.is_superuser
-        and not is_boss(user)
-        and not is_ceo(user)
-        and not is_guest(user)
-    )
