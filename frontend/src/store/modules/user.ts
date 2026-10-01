@@ -3,7 +3,6 @@ import { store } from '../index'
 import { UserType } from '@/api/login/types'
 import { ElMessageBox } from 'element-plus'
 import { useI18n } from '@/hooks/web/useI18n'
-import { loginOutApi } from '@/api/login'
 import { useTagsViewStore } from './tagsView'
 import router, { resetRouter } from '@/router'
 import { useXinhuoAuthStore } from '@/store/modules/xinhuoAuth'
@@ -72,12 +71,7 @@ export const useUserStore = defineStore('user', {
         type: 'warning'
       })
         .then(async () => {
-          // 薪火走 JWT，无可用 mock 登出接口；无论接口成败都清本地登录态
-          try {
-            await loginOutApi()
-          } catch (_) {
-            /* ignore */
-          }
+          // 薪火走 JWT，无服务端登出接口，直接清本地登录态
           this.reset()
         })
         .catch(() => {})

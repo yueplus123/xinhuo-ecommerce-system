@@ -15,7 +15,7 @@ import {
 } from 'element-plus'
 import { Refresh, FullScreen } from '@element-plus/icons-vue'
 import { BaseButton } from '@/components/Button'
-import api from '@/api/xinhuo/client'
+import { fetchDataScreen } from '@/api/xinhuo/dashboard'
 import { useFullscreen } from '@vueuse/core'
 
 defineOptions({ name: 'DataScreen' })
@@ -392,7 +392,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const { data } = await api.get('/data-screen/')
+    const { data } = await fetchDataScreen()
     payload.value = data
     // 默认保持「本月」，不自动改周期
   } catch (e: any) {
@@ -436,7 +436,7 @@ async function load() {
 async function silentRefresh() {
   if (document.visibilityState !== 'visible') return
   try {
-    const { data } = await api.get('/data-screen/')
+    const { data } = await fetchDataScreen()
     payload.value = data
     await nextTick()
     renderPeriodCharts()

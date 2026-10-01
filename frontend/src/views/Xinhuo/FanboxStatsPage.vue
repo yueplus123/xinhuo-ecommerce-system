@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElAlert, ElOption, ElSelect, ElTabPane, ElTabs } from 'element-plus'
 import { ContentWrap } from '@/components/ContentWrap'
 import { BaseButton } from '@/components/Button'
-import api from '@/api/xinhuo/client'
+import { listFanboxStatsPages } from '@/api/xinhuo/infoPages'
 
 defineOptions({ name: 'FanboxStats' })
 
@@ -36,7 +36,7 @@ async function loadPages() {
   loading.value = true
   loadError.value = ''
   try {
-    const { data } = await api.get('/fanbox-stats-pages/')
+    const { data } = await listFanboxStatsPages()
     const raw = data?.results || data
     const list = Array.isArray(raw) ? raw.slice() : []
     list.sort((a, b) => {

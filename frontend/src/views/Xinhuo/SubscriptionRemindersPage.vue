@@ -16,7 +16,15 @@ import { Search } from '@/components/Search'
 import { Table, TableColumn } from '@/components/Table'
 import { BaseButton } from '@/components/Button'
 import { FormSchema } from '@/components/Form'
-import api from '@/api/xinhuo/client'
+import {
+  listSubscriptionPlatformOptions,
+  listSubscriptionReminders,
+  createSubscriptionReminder,
+  updateSubscriptionReminder,
+  markSubscriptionRenewed,
+  deleteSubscriptionReminder
+} from '@/api/xinhuo/subscriptionReminders'
+import { formatRequestError, formatDateTime } from '@/utils/format'
 
 defineOptions({ name: 'SubscriptionReminders' })
 
@@ -61,32 +69,6 @@ function pad2(n: number) {
   return String(n).padStart(2, '0')
 }
 
-function formatApiErrorData(data: any, fallback: string) {
-  if (data == null) return fallback
-  if (typeof data === 'string') return data
-  if (typeof data.detail === 'string') return data.detail
-  if (Array.isArray(data.detail)) return data.detail.map(String).join('；') || fallback
-  if (typeof data === 'object') {
-    const parts: string[] = []
-    for (const [k, v] of Object.entries(data)) {
-      if (k === 'detail') continue
-      const msg = Array.isArray(v) ? v.map(String).join('；') : String(v)
-      if (msg) parts.push(msg)
-    }
-    if (parts.length) return parts.join('；')
-    if (typeof data.detail === 'string') return data.detail
-  }
-  return fallback
-}
-
-function formatRequestError(e: any, fallback: string) {
-  const d = e?.response?.data
-  const fromData = formatApiErrorData(d, '')
-  if (fromData) return fromData
-  if (e?.message) return String(e.message)
-  return fallback
-}
-
 function nowDateValue() {
   const d = new Date()
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
@@ -109,23 +91,6 @@ function parseLocalYmd(s: string) {
 function formatReminderDate(ymdOrIso: string) {
   const s = isoToDateOnly(ymdOrIso)
   return s || '—'
-}
-
-function formatDateTime(iso: string) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return String(iso)
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
-    .format(d)
-    .replace(/\//g, '-')
 }
 
 function statusLabel(ymdOrIso: string) {
@@ -164,7 +129,7 @@ function queryPlatform(queryString: string, cb: (results: { value: string }[]) =
 
 async function loadPlatformOptions() {
   try {
-    const { data } = await api.get('/subscription-platform-options/')
+    const { data } = await listSubscriptionPlatformOptions()
     const list = Array.isArray(data) ? data : data?.results || []
     platformOptions.value = list.slice().sort((a, b) => {
       const ao = Number(a?.sort_order ?? 0)
@@ -183,7 +148,7 @@ async function loadRows() {
     const params: Recordable = { page: page.value }
     const q = searchParams.q.trim()
     if (q) params.q = q
-    const { data } = await api.get('/subscription-reminders/', { params })
+    const { data } = await listSubscriptionReminders(params)
     if (Array.isArray(data)) {
       rows.value = data
       totalCount.value = data.length
@@ -222,7 +187,7 @@ async function onCreate() {
     return
   }
   try {
-    await api.post('/subscription-reminders/', {
+    await createSubscriptionReminder({
       wechat_label: w,
       platform_input: plat,
       next_reminder_at: dt,
@@ -250,7 +215,7 @@ function openEdit(r: any) {
 
 async function saveEdit() {
   try {
-    await api.patch(`/subscription-reminders/${editId.value}/`, {
+    await updateSubscriptionReminder(editId.value, {
       wechat_label: String(editForm.value.wechat_label || '').trim(),
       platform_input: String(editForm.value.platform_input || '').trim(),
       next_reminder_at: String(editForm.value.next_reminder_at || '').trim(),
@@ -285,7 +250,7 @@ async function confirmRenew() {
     return
   }
   try {
-    await api.post(`/subscription-reminders/${id}/mark-renewed/`, { next_reminder_at: dt })
+    await markSubscriptionRenewed(id, { next_reminder_at: dt })
     renewOpen.value = false
     ElMessage.success('登记成功')
     await loadRows()
@@ -301,7 +266,7 @@ async function onDelete(r: any) {
       '删除确认',
       { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
     )
-    await api.delete(`/subscription-reminders/${r.id}/`)
+    await deleteSubscriptionReminder(r.id)
     ElMessage.success('删除成功')
     await loadRows()
   } catch (e: any) {

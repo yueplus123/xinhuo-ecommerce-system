@@ -15,7 +15,13 @@ import { ContentWrap } from '@/components/ContentWrap'
 import { Search } from '@/components/Search'
 import { BaseButton } from '@/components/Button'
 import type { FormSchema } from '@/components/Form'
-import api from '@/api/xinhuo/client'
+import {
+  fetchPaymentMeta,
+  fetchStaffUsers,
+  listPaymentRecords,
+  exportPaymentRecords,
+  batchSubmitPaymentRecords
+} from '@/api/xinhuo/payments'
 
 defineOptions({ name: 'PaymentStats' })
 
@@ -347,8 +353,8 @@ function deleteCurrentPreviewImage() {
 
 async function loadMeta() {
   const [{ data: m }, { data: us }] = await Promise.all([
-    api.get('/payment-meta/'),
-    api.get('/staff-users/')
+    fetchPaymentMeta(),
+    fetchStaffUsers()
   ])
   channels.value = m.channels || []
   users.value = us || []
@@ -370,9 +376,7 @@ async function loadRecords(resetPage = true) {
   if (resetPage) page.value = 1
   listLoading.value = true
   try {
-    const { data } = await api.get('/payment-records/', {
-      params: { ...filters, page: page.value }
-    })
+    const { data } = await listPaymentRecords({ ...filters, page: page.value })
     if (Array.isArray(data)) {
       records.value = data
       totalCount.value = data.length
@@ -402,10 +406,7 @@ function onReset() {
 }
 
 async function exportExcel() {
-  const resp = await api.get('/payment-records/export/', {
-    params: { ...filters },
-    responseType: 'blob'
-  })
+  const resp = await exportPaymentRecords({ ...filters })
   const url = URL.createObjectURL(resp.data)
   const a = document.createElement('a')
   a.href = url
@@ -438,7 +439,7 @@ async function submitBatch() {
       fd.append(`order_md_${idx}`, formatOrderMd(row))
       ;(row.screenshots || []).forEach((f: File) => fd.append(`screenshots_${idx}`, f))
     })
-    const { data } = await api.post('/payment-records/batch-submit/', fd, {
+    const { data } = await batchSubmitPaymentRecords(fd, {
       timeout: Number(import.meta.env.VITE_API_TIMEOUT_MS) || 120000
     })
     if (data?.duplicate) {

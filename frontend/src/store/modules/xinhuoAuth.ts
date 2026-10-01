@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import api, { requestAccessToken } from '@/api/xinhuo/client'
+import { requestAccessToken } from '@/api/xinhuo/client'
+import { fetchMe } from '@/api/xinhuo/auth'
 import { clearAuthStorage, isSessionExpired, markSessionExpiry } from '@/auth/session'
 
 export type XinhuoMe = {
@@ -60,7 +61,7 @@ export const useXinhuoAuthStore = defineStore('xinhuoAuth', {
         return
       }
       try {
-        const { data } = await api.get('/auth/me/')
+        const { data } = await fetchMe()
         this.me = data
       } catch (e: any) {
         const st = e.response?.status

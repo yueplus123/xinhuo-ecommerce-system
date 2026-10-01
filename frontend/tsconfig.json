@@ -22,6 +22,7 @@
     "noImplicitAny": false,
     "skipLibCheck": true,
     "paths": {
+      "@/ledger-app/mount.tsx": ["types/ledger-mount"],
       "@/*": ["src/*"]
     },
     "types": [
@@ -32,6 +33,6 @@
       "vite-plugin-svg-icons/client"
     ]
   },
-  "include": ["src", "types/**/*.d.ts", "mock/**/*.ts"]
-  // "exclude": ["dist", "node_modules"]
+  "include": ["src", "types/**/*.d.ts"],
+  "exclude": ["dist", "dist-pro", "node_modules", "src/ledger-app"]
 }

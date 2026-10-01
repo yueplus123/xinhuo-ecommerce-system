@@ -12,7 +12,7 @@ import {
 import { ContentWrap } from '@/components/ContentWrap'
 import { BaseButton } from '@/components/Button'
 import { Icon } from '@/components/Icon'
-import api from '@/api/xinhuo/client'
+import { listHallBlocks } from '@/api/xinhuo/dashboard'
 
 defineOptions({ name: 'Hall' })
 
@@ -103,7 +103,7 @@ async function load() {
   loadError.value = ''
   loading.value = true
   try {
-    const { data } = await api.get('/hall-blocks/')
+    const { data } = await listHallBlocks()
     rows.value = sortHallRows(normalizeHallList(data))
   } catch (e: any) {
     rows.value = []

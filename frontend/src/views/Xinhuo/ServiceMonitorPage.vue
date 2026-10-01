@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElAlert } from 'element-plus'
 import { ContentWrap } from '@/components/ContentWrap'
-import api from '@/api/xinhuo/client'
+import { listServiceMonitorPages } from '@/api/xinhuo/infoPages'
 
 defineOptions({ name: 'ServiceMonitor' })
 
@@ -19,7 +19,7 @@ async function loadPages() {
   loading.value = true
   loadError.value = ''
   try {
-    const { data } = await api.get('/service-monitor-pages/')
+    const { data } = await listServiceMonitorPages()
     const raw = data?.results || data
     const list = Array.isArray(raw) ? raw.slice() : []
     list.sort((a, b) => {

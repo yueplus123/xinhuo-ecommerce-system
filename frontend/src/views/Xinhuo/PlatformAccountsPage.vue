@@ -4,7 +4,7 @@ import { ElLink, ElMessage } from 'element-plus'
 import { ContentWrap } from '@/components/ContentWrap'
 import { Table, TableColumn } from '@/components/Table'
 import { BaseButton } from '@/components/Button'
-import api from '@/api/xinhuo/client'
+import { listPlatformAccounts } from '@/api/xinhuo/infoPages'
 
 defineOptions({ name: 'PlatformAccounts' })
 
@@ -93,7 +93,7 @@ const columns: TableColumn[] = [
 async function load() {
   loading.value = true
   try {
-    const { data } = await api.get('/platform-accounts/')
+    const { data } = await listPlatformAccounts()
     const raw = data.results || data
     const list = (Array.isArray(raw) ? raw : []).slice()
     list.sort((a, b) => {

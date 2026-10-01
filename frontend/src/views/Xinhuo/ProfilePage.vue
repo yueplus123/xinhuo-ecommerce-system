@@ -19,7 +19,7 @@ import {
 } from 'element-plus'
 import { ContentWrap } from '@/components/ContentWrap'
 import { useXinhuoAuthStore } from '@/store/modules/xinhuoAuth'
-import api from '@/api/xinhuo/client'
+import { fetchLoginLogs, uploadAvatar, deleteAvatar } from '@/api/xinhuo/auth'
 import { getUserAvatarUrl } from '@/utils/avatar'
 import defaultAvatar from '@/assets/imgs/avatar.jpg'
 
@@ -78,7 +78,7 @@ function formatLogTime(value: string) {
 async function loadLoginLogs() {
   logsLoading.value = true
   try {
-    const { data } = await api.get('/auth/me/login-logs/')
+    const { data } = await fetchLoginLogs()
     loginLogs.value = Array.isArray(data) ? data : []
   } catch (e: any) {
     loginLogs.value = []
@@ -139,7 +139,7 @@ async function saveAvatar() {
   }
   try {
     avatarLoading.value = true
-    const { data } = await api.post('/auth/me/avatar/', { avatar: pendingBase64.value })
+    const { data } = await uploadAvatar(pendingBase64.value)
     auth.me = data
     dialogVisible.value = false
     ElMessage.success('头像已更新')
@@ -153,7 +153,7 @@ async function saveAvatar() {
 async function clearAvatar() {
   try {
     avatarLoading.value = true
-    const { data } = await api.delete('/auth/me/avatar/')
+    const { data } = await deleteAvatar()
     auth.me = data
     dialogVisible.value = false
     ElMessage.success('已恢复默认头像')

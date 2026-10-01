@@ -1,26 +1,20 @@
 <script setup lang="tsx">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { reactive } from 'vue'
 import {
   ElDialog,
   ElForm,
   ElFormItem,
   ElInput,
-  ElMessage,
-  ElMessageBox
+  ElMessage
 } from 'element-plus'
 import { Table, TableColumn } from '@/components/Table'
 import { BaseButton } from '@/components/Button'
-import api from '@/api/xinhuo/client'
+import { useCrudPage } from '@/hooks/web/useCrudPage'
+import { formatDateTimeSeconds } from '@/utils/format'
 
 defineOptions({ name: 'CommonCardNumbers' })
 
-const rows = ref<any[]>([])
-const loading = ref(false)
-const saving = ref(false)
 const searchParams = reactive({ q: '' })
-const page = ref(1)
-const totalCount = ref(0)
-const pageSize = ref(50)
 
 const emptyForm = () => ({
   platform: '',
@@ -29,53 +23,6 @@ const emptyForm = () => ({
   cvv: '',
   remark: ''
 })
-
-const form = ref(emptyForm())
-const editOpen = ref(false)
-const editId = ref<number | null>(null)
-const editForm = ref(emptyForm())
-
-function formatApiErrorData(data: any, fallback: string) {
-  if (data == null) return fallback
-  if (typeof data === 'string') return data
-  if (typeof data.detail === 'string') return data.detail
-  if (Array.isArray(data.detail)) return data.detail.map(String).join('；') || fallback
-  if (typeof data === 'object') {
-    const parts: string[] = []
-    for (const [k, v] of Object.entries(data)) {
-      if (k === 'detail') continue
-      const msg = Array.isArray(v) ? v.map(String).join('；') : String(v)
-      if (msg) parts.push(msg)
-    }
-    if (parts.length) return parts.join('；')
-  }
-  return fallback
-}
-
-function formatRequestError(e: any, fallback: string) {
-  const fromData = formatApiErrorData(e?.response?.data, '')
-  if (fromData) return fromData
-  if (e?.message) return String(e.message)
-  return fallback
-}
-
-function formatDateTimeSeconds(iso: string) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return String(iso)
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  })
-    .format(d)
-    .replace(/\//g, '-')
-}
 
 function payloadFrom(src: Recordable) {
   return {
@@ -95,28 +42,37 @@ function validatePayload(p: ReturnType<typeof payloadFrom>) {
   return true
 }
 
-async function loadRows() {
-  loading.value = true
-  try {
-    const params: Recordable = { page: page.value, page_size: pageSize.value }
-    const q = searchParams.q.trim()
-    if (q) params.q = q
-    const { data } = await api.get('/common-cards/', { params })
-    if (Array.isArray(data)) {
-      rows.value = data
-      totalCount.value = data.length
-      return
-    }
-    rows.value = data.results || []
-    totalCount.value = data.count ?? rows.value.length
-  } catch (e: any) {
-    ElMessage.error(formatRequestError(e, '加载失败'))
-    rows.value = []
-    totalCount.value = 0
-  } finally {
-    loading.value = false
-  }
-}
+const {
+  rows,
+  loading,
+  saving,
+  page,
+  pageSize,
+  totalCount,
+  form,
+  editOpen,
+  editForm,
+  loadRows,
+  onCreate,
+  openEdit,
+  saveEdit,
+  onDelete
+} = useCrudPage({
+  endpoint: '/common-cards/',
+  pageSize: 50,
+  emptyForm,
+  payloadFrom,
+  validate: validatePayload,
+  rowToForm: (r) => ({
+    platform: r.platform || '',
+    card_number: r.card_number || '',
+    expiry: r.expiry || '',
+    cvv: r.cvv || '',
+    remark: r.remark || ''
+  }),
+  deleteMessage: (r) => `确定删除「${r.platform}」的卡号记录吗？`,
+  extraParams: () => (searchParams.q.trim() ? { q: searchParams.q.trim() } : {})
+})
 
 function onSearch(params: Recordable = {}) {
   Object.assign(searchParams, { q: params.q || '' })
@@ -130,72 +86,6 @@ function onSearch(params: Recordable = {}) {
 function onResetSearch() {
   searchParams.q = ''
   onSearch({ q: '' })
-}
-
-watch(page, (next, prev) => {
-  if (next !== prev) loadRows()
-})
-
-async function onCreate() {
-  const body = payloadFrom(form.value)
-  if (!validatePayload(body)) return
-  saving.value = true
-  try {
-    await api.post('/common-cards/', body)
-    form.value = emptyForm()
-    ElMessage.success('添加成功')
-    await loadRows()
-  } catch (e: any) {
-    ElMessage.error(formatRequestError(e, '保存失败'))
-  } finally {
-    saving.value = false
-  }
-}
-
-function openEdit(r: any) {
-  editId.value = r.id
-  editForm.value = {
-    platform: r.platform || '',
-    card_number: r.card_number || '',
-    expiry: r.expiry || '',
-    cvv: r.cvv || '',
-    remark: r.remark || ''
-  }
-  editOpen.value = true
-}
-
-async function saveEdit() {
-  if (!editId.value) return
-  const body = payloadFrom(editForm.value)
-  if (!validatePayload(body)) return
-  saving.value = true
-  try {
-    await api.patch(`/common-cards/${editId.value}/`, body)
-    editOpen.value = false
-    ElMessage.success('更新成功')
-    await loadRows()
-  } catch (e: any) {
-    ElMessage.error(formatRequestError(e, '更新失败'))
-  } finally {
-    saving.value = false
-  }
-}
-
-async function onDelete(r: any) {
-  try {
-    await ElMessageBox.confirm(
-      `确定删除「${r.platform}」的卡号记录吗？`,
-      '删除确认',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
-    )
-    await api.delete(`/common-cards/${r.id}/`)
-    ElMessage.success('删除成功')
-    await loadRows()
-  } catch (e: any) {
-    if (e !== 'cancel' && e?.action !== 'cancel') {
-      ElMessage.error(formatRequestError(e, '删除失败'))
-    }
-  }
 }
 
 const columns: TableColumn[] = [
@@ -236,9 +126,6 @@ const columns: TableColumn[] = [
   }
 ]
 
-onMounted(() => {
-  loadRows()
-})
 </script>
 
 <template>

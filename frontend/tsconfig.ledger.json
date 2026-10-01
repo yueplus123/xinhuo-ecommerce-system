@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "noEmit": true
+  },
+  "include": ["src/ledger-app", "types/env.d.ts", "types/global.d.ts"],
+  "exclude": ["dist", "dist-pro", "node_modules"]
+}

@@ -6,7 +6,7 @@ import { Search } from '@/components/Search'
 import { Table, TableColumn } from '@/components/Table'
 import { BaseButton } from '@/components/Button'
 import { FormSchema } from '@/components/Form'
-import api from '@/api/xinhuo/client'
+import { listNannyTutorials } from '@/api/xinhuo/tutorials'
 
 defineOptions({ name: 'NannyTutorials' })
 
@@ -109,11 +109,9 @@ async function load(params: Recordable = {}) {
   })
   loading.value = true
   try {
-    const { data } = await api.get('/nanny-tutorials/', {
-      params: {
-        name: searchParams.name.trim() || undefined,
-        tag: searchParams.tag.trim() || undefined
-      }
+    const { data } = await listNannyTutorials({
+      name: searchParams.name.trim() || undefined,
+      tag: searchParams.tag.trim() || undefined
     })
     const list = Array.isArray(data)
       ? data.slice()

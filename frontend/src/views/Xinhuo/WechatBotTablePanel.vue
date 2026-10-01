@@ -13,7 +13,14 @@ import {
 } from 'element-plus'
 import { Table, TableColumn } from '@/components/Table'
 import { BaseButton } from '@/components/Button'
-import api from '@/api/xinhuo/client'
+import {
+  batchDeleteWechatBotRecords,
+  listWechatBotEmployees,
+  listWechatBotRecords,
+  createWechatBotRecord,
+  updateWechatBotRecord,
+  deleteWechatBotRecord
+} from '@/api/xinhuo/wechatBot'
 import {
   WECHAT_BOT_TABLES,
   wechatBotTableColumns,
@@ -125,7 +132,7 @@ async function onBatchDelete() {
       cancelButtonText: '取消'
     })
     batchDeleting.value = true
-    const { data } = await api.post('/wechat-bot/records/batch-delete/', { ids })
+    const { data } = await batchDeleteWechatBotRecords(ids)
     const deleted = Number(data?.deleted ?? ids.length)
     ElMessage.success(`已删除 ${deleted} 条`)
     selectedRows.value = []
@@ -186,9 +193,7 @@ async function loadEmployees() {
   }
   empLoading.value = true
   try {
-    const { data } = await api.get('/wechat-bot/employees/', {
-      params: { table: props.tableType }
-    })
+    const { data } = await listWechatBotEmployees(props.tableType)
     const list = (data?.employees || []).map((x: string) => String(x || '').trim()).filter(Boolean)
     employees.value = list
     if (employeeFilter.value && !list.includes(employeeFilter.value)) {
@@ -210,14 +215,12 @@ async function loadRows() {
   }
   loading.value = true
   try {
-    const { data } = await api.get('/wechat-bot/records/', {
-      params: {
-        table: props.tableType,
-        employee: employeeFilter.value || undefined,
-        q: keyword.value.trim() || undefined,
-        page: page.value,
-        page_size: pageSize.value
-      }
+    const { data } = await listWechatBotRecords({
+      table: props.tableType,
+      employee: employeeFilter.value || undefined,
+      q: keyword.value.trim() || undefined,
+      page: page.value,
+      page_size: pageSize.value
     })
     const list = data?.results || []
     rows.value = list.map((r: any) => ({
@@ -292,7 +295,7 @@ async function onCreate() {
         body.business_name = String(createForm.business_name || '').trim()
       }
     }
-    await api.post('/wechat-bot/records/', body)
+    await createWechatBotRecord(body)
     ElMessage.success('添加成功')
     resetCreateForm()
     page.value = 1
@@ -311,7 +314,7 @@ async function onDelete(r: any) {
       confirmButtonText: '删除',
       cancelButtonText: '取消'
     })
-    await api.delete(`/wechat-bot/records/${r.id}/`)
+    await deleteWechatBotRecord(r.id)
     ElMessage.success('已删除')
     selectedRows.value = selectedRows.value.filter((x) => x?.id !== r.id)
     await refreshAll()
@@ -374,7 +377,7 @@ async function saveEdit() {
         body.business_name = String(editForm.business_name || '').trim()
       }
     }
-    await api.patch(`/wechat-bot/records/${editId.value}/`, body)
+    await updateWechatBotRecord(editId.value, body)
     ElMessage.success('已更新')
     editOpen.value = false
     await refreshAll()

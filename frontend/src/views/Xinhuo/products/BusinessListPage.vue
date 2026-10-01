@@ -9,7 +9,8 @@ import {
 import { ContentWrap } from "@/components/ContentWrap";
 import { BaseButton } from "@/components/Button";
 import SkuBizTable from "./SkuBizTable.vue";
-import api from '@/api/xinhuo/client';
+import { getPlatform, listUsdProxyPriceTiers } from '@/api/xinhuo/platforms';
+import { listPaymentTutorials, listNannyTutorials } from "@/api/xinhuo/tutorials";
 import { showCopySuccess } from '@/copyFeedback';
 
 defineOptions({ name: "PlatformBusinesses" });
@@ -401,7 +402,7 @@ async function loadPlatform() {
   openPricePopoverSkuId.value = null;
   locateTip.value = "";
   try {
-    const { data } = await api.get(`/platforms/${id}/`);
+    const { data } = await getPlatform(id);
     platform.value = data;
     syncSelectedBiz();
     await locateFromQuery();
@@ -441,7 +442,7 @@ watch(openPricePopoverSkuId, (id) => {
 async function loadTutorialMap() {
   const m = new Map();
   try {
-    const { data } = await api.get("/payment-tutorials/");
+    const { data } = await listPaymentTutorials();
     const rows = data?.results || data || [];
     rows.forEach((r) => {
       const name = String(r?.name || "").trim();
@@ -452,7 +453,7 @@ async function loadTutorialMap() {
     /* 远程电脑图文等旧表拉取失败时仍尝试保姆级/部署模板 */
   }
   try {
-    const { data } = await api.get("/nanny-tutorials/");
+    const { data } = await listNannyTutorials();
     const rows = data?.results || [];
     rows.forEach((r) => {
       const name = String(r?.name || "").trim();
@@ -467,7 +468,7 @@ async function loadTutorialMap() {
 
 async function loadUsdProxyPriceTiers() {
   try {
-    const { data } = await api.get("/usd-proxy-price-tiers/");
+    const { data } = await listUsdProxyPriceTiers();
     usdProxyPriceTiers.value = data?.results || data || [];
   } catch (_) {
     usdProxyPriceTiers.value = [];

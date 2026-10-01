@@ -6,7 +6,7 @@ import { Search } from '@/components/Search'
 import { Table, TableColumn } from '@/components/Table'
 import { BaseButton } from '@/components/Button'
 import { FormSchema } from '@/components/Form'
-import api from '@/api/xinhuo/client'
+import { listPaymentTutorials } from '@/api/xinhuo/tutorials'
 
 defineOptions({ name: 'PaymentTutorials' })
 
@@ -77,9 +77,7 @@ async function load(params: Recordable = {}) {
   Object.assign(searchParams, { name: params.name || '' })
   loading.value = true
   try {
-    const { data } = await api.get('/payment-tutorials/', {
-      params: { name: searchParams.name || undefined }
-    })
+    const { data } = await listPaymentTutorials({ name: searchParams.name || undefined })
     const raw = data.results || data
     const list = (Array.isArray(raw) ? raw : []).slice()
     list.sort((a, b) => {

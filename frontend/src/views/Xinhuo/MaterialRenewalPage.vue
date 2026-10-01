@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   ElDatePicker,
   ElDialog,
@@ -21,7 +21,14 @@ import {
 import { ContentWrap } from '@/components/ContentWrap'
 import { BaseButton } from '@/components/Button'
 import { Icon } from '@/components/Icon'
-import api from '@/api/xinhuo/client'
+import {
+  listMaterialRenewals,
+  createMaterialRenewal,
+  updateMaterialRenewal,
+  markMaterialRenewed,
+  deleteMaterialRenewal
+} from '@/api/xinhuo/materialRenewals'
+import { formatRequestError, formatDateTime } from '@/utils/format'
 
 defineOptions({ name: 'MaterialRenewal' })
 
@@ -66,30 +73,6 @@ function pad2(n: number) {
   return String(n).padStart(2, '0')
 }
 
-function formatApiErrorData(data: any, fallback: string) {
-  if (data == null) return fallback
-  if (typeof data === 'string') return data
-  if (typeof data.detail === 'string') return data.detail
-  if (Array.isArray(data.detail)) return data.detail.map(String).join('；') || fallback
-  if (typeof data === 'object') {
-    const parts: string[] = []
-    for (const [k, v] of Object.entries(data)) {
-      if (k === 'detail') continue
-      const msg = Array.isArray(v) ? v.map(String).join('；') : String(v)
-      if (msg) parts.push(msg)
-    }
-    if (parts.length) return parts.join('；')
-  }
-  return fallback
-}
-
-function formatRequestError(e: any, fallback: string) {
-  const fromData = formatApiErrorData(e?.response?.data, '')
-  if (fromData) return fromData
-  if (e?.message) return String(e.message)
-  return fallback
-}
-
 function nowDateValue() {
   const d = new Date()
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
@@ -128,23 +111,6 @@ function formatDueFull(ymdOrIso: string) {
   const d = parseLocalYmd(ymdOrIso)
   if (!d) return '—'
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
-}
-
-function formatDateTime(iso: string) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return String(iso)
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
-    .format(d)
-    .replace(/\//g, '-')
 }
 
 function statusBadge(r: any) {
@@ -241,7 +207,7 @@ const inactiveRows = computed(() => filteredRows.value.filter((r) => r.is_active
 async function loadRows() {
   loading.value = true
   try {
-    const { data } = await api.get('/material-renewals/', { params: { page: 1 } })
+    const { data } = await listMaterialRenewals({ page: 1 })
     const list = Array.isArray(data) ? data : data?.results || []
     rows.value = list
   } catch (e: any) {
@@ -286,7 +252,7 @@ async function saveCreate() {
     return
   }
   try {
-    await api.post('/material-renewals/', body)
+    await createMaterialRenewal(body)
     createOpen.value = false
     ElMessage.success('已添加')
     await loadRows()
@@ -318,7 +284,7 @@ async function saveEdit() {
     return
   }
   try {
-    await api.patch(`/material-renewals/${editId.value}/`, body)
+    await updateMaterialRenewal(editId.value, body)
     editOpen.value = false
     ElMessage.success('已更新')
     await loadRows()
@@ -358,7 +324,7 @@ async function confirmRenew() {
       }
       body.next_due_at = d
     }
-    const { data } = await api.post(`/material-renewals/${renewRow.value.id}/mark-renewed/`, body)
+    const { data } = await markMaterialRenewed(renewRow.value.id, body)
     renewOpen.value = false
     ElMessage.success('已登记续费')
     await loadRows()
@@ -377,7 +343,7 @@ async function onDelete(r: any) {
       confirmButtonText: '删除',
       cancelButtonText: '取消'
     })
-    await api.delete(`/material-renewals/${r.id}/`)
+    await deleteMaterialRenewal(r.id)
     if (detailOpen.value && detailRow.value?.id === r.id) detailOpen.value = false
     ElMessage.success('已删除')
     await loadRows()

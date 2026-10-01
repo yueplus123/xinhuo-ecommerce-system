@@ -6,7 +6,7 @@ import { ContentWrap } from '@/components/ContentWrap'
 import { Search } from '@/components/Search'
 import { BaseButton } from '@/components/Button'
 import { FormSchema } from '@/components/Form'
-import api from '@/api/xinhuo/client'
+import { listPlatforms, exportPlatformBusinesses } from '@/api/xinhuo/platforms'
 import { showCopySuccess } from '@/copyFeedback'
 
 defineOptions({ name: 'ProductPlatforms' })
@@ -114,9 +114,7 @@ async function load() {
   loadError.value = ''
   loading.value = true
   try {
-    const { data } = await api.get('/platforms/', {
-      params: { q: q.value || undefined, status: status.value || undefined }
-    })
+    const { data } = await listPlatforms({ q: q.value || undefined, status: status.value || undefined })
     const list = normalizeList(data).slice()
     list.sort((a, b) => {
       const ao = Number(a?.sort_order ?? 0)
@@ -171,12 +169,9 @@ async function exportBusinesses() {
   if (exporting.value) return
   exporting.value = true
   try {
-    const resp = await api.get('/platforms/export-businesses/', {
-      params: {
-        q: q.value || undefined,
-        status: status.value || undefined
-      },
-      responseType: 'blob'
+    const resp = await exportPlatformBusinesses({
+      q: q.value || undefined,
+      status: status.value || undefined
     })
     const blob = resp.data instanceof Blob ? resp.data : new Blob([resp.data], { type: 'text/plain' })
     const text = await blob.text()
