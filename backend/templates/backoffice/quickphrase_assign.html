@@ -1,0 +1,314 @@
+﻿{% extends "backoffice/base.html" %}
+
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}<p>{{ subtitle }}</p>{% endblock %}
+
+{% block content %}
+<div class="bb-card assign-card">
+  <form method="post" class="assign-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" id="action_input" value="" />
+    <input type="hidden" name="phrase_action_target_id" id="phrase_action_target_id_input" value="" />
+    <input type="hidden" name="edit_phrase_id" id="edit_phrase_id_input" value="" />
+    <div class="assign-top-row">
+      <div class="assign-top-left">
+        <div class="top-info-grid">
+          <div class="top-info-item">
+            <label>快捷语名</label>
+            <input id="new_phrase_name_input" type="text" name="new_phrase_name" class="top-input" placeholder="输入快捷语名" />
+          </div>
+          <div class="top-info-item">
+            <label>快捷语内容</label>
+            <input id="new_phrase_content_input" type="text" name="new_phrase_content" class="top-input" placeholder="输入快捷语内容" />
+          </div>
+        </div>
+        <button id="btn_add_phrase" type="submit" class="bb-btn" onclick="setAssignAction('add_phrase')">一键添加</button>
+      </div>
+      <div class="assign-top-right">
+        <button type="submit" class="bb-btn bb-btn-primary" onclick="setAssignAction('send_phrase')">发送按钮</button>
+      </div>
+    </div>
+
+    <div class="assign-grid">
+      <div class="assign-col">
+        <div class="assign-title">快捷语模块</div>
+        <div class="inner-search">
+          <input id="q_phrase_input" type="text" value="{{ q_phrase }}" placeholder="搜索模块" />
+          <button type="button" class="bb-btn" onclick="doAssignSearch()">查询</button>
+        </div>
+        <div class="assign-list-grid">
+          <div class="assign-list">
+            {% for p in phrases %}
+            <div class="assign-row">
+              <input
+                type="radio"
+                class="phrase-radio"
+                name="phrase_pick"
+                value="{{ p.id }}"
+                data-name="{{ p.name }}"
+                data-content="{{ p.content|escapejs }}"
+              />
+              <span class="assign-row-text">{{ p.name }}：{{ p.content }}</span>
+              <div class="row-actions">
+                <button
+                  type="button"
+                  class="bb-btn bb-btn-sm"
+                  onclick="startEditPhrase('{{ p.id }}', '{{ p.name|escapejs }}', '{{ p.content|escapejs }}')"
+                >
+                  编辑
+                </button>
+                <button
+                  type="submit"
+                  class="bb-btn bb-btn-danger bb-btn-sm"
+                  onclick="return submitDeletePhrase('{{ p.id }}', '{{ p.name|escapejs }}')"
+                >
+                  删除
+                </button>
+              </div>
+            </div>
+            {% empty %}
+            <div class="assign-empty">暂无快捷语</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="assign-col">
+        <div class="assign-title">sku模块</div>
+        <div class="inner-search">
+          <input id="q_sku_input" type="text" value="{{ q_sku }}" placeholder="搜索模块" />
+          <button type="button" class="bb-btn" onclick="doAssignSearch()">查询</button>
+        </div>
+        <div class="assign-list-grid">
+          <div class="assign-list">
+            {% for sku in skus %}
+            <label class="assign-row">
+              <input type="checkbox" name="sku_ids" value="{{ sku.id }}" />
+              <span class="assign-row-text">{{ sku.business.platform.name }} / {{ sku.business.name }} / {{ sku.name }}</span>
+            </label>
+            {% empty %}
+            <div class="assign-empty">暂无SKU</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .assign-card {
+    border-radius: 14px;
+    border: 1px solid rgba(22, 101, 52, 0.22);
+    box-shadow: 0 8px 22px rgba(20, 83, 45, 0.07);
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.92);
+  }
+  .assign-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .assign-top-row {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 12px;
+  }
+  .assign-top-left {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    border: 1px solid rgba(22, 101, 52, 0.28);
+    border-radius: 10px;
+    padding: 8px;
+  }
+  .top-info-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 150px minmax(240px, 1fr);
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+  }
+  .top-info-item label {
+    display: block;
+    font-size: 12px;
+    color: #5d714c;
+    margin-bottom: 4px;
+  }
+  .top-input {
+    width: 100%;
+    min-height: 34px;
+    padding: 6px 10px;
+    border: 1px solid rgba(22, 101, 52, 0.45);
+    border-radius: 10px;
+  }
+  .assign-top-right {
+    border: 1px solid rgba(22, 101, 52, 0.28);
+    border-radius: 10px;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .assign-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .assign-title {
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #92400c;
+    font-size: 14px;
+  }
+  .inner-search {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .inner-search input {
+    flex: 1;
+    min-height: 34px;
+    padding: 6px 10px;
+    border: 1px solid rgba(22, 101, 52, 0.45);
+    border-radius: 10px;
+  }
+  .assign-list {
+    min-height: 420px;
+    max-height: 420px;
+    overflow: auto;
+    border: 1px solid rgba(22, 101, 52, 0.28);
+    border-radius: 10px;
+    padding: 8px;
+    background: #fff;
+  }
+  .assign-row {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: start;
+    justify-items: start;
+    padding: 6px 2px;
+    border-bottom: 1px dashed rgba(22, 101, 52, 0.2);
+  }
+  .assign-row:last-child {
+    border-bottom: 0;
+  }
+  .assign-row input[type="radio"],
+  .assign-row input[type="checkbox"] {
+    margin: 2px 0 0;
+    width: auto !important;
+    min-height: auto !important;
+    padding: 0 !important;
+    display: inline-block;
+    justify-self: start;
+    align-self: start;
+  }
+  .assign-row-text {
+    color: #1b4332;
+    word-break: break-word;
+  }
+  .row-actions {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .assign-empty {
+    color: #5d714c;
+    padding: 8px 4px;
+  }
+  .bb-btn-sm {
+    min-height: 24px;
+    padding: 2px 8px;
+    font-size: 12px;
+  }
+  @media (max-width: 960px) {
+    .assign-top-row {
+      grid-template-columns: 1fr;
+    }
+    .assign-grid {
+      grid-template-columns: 1fr;
+    }
+    .top-info-grid {
+      grid-template-columns: 1fr;
+    }
+    .assign-list {
+      min-height: 320px;
+      max-height: 320px;
+    }
+  }
+</style>
+<script>
+  let assignSearchTimer = null;
+
+  function setAssignAction(actionName) {
+    const el = document.getElementById("action_input");
+    if (el) el.value = actionName;
+  }
+
+  function doAssignSearch() {
+    const qPhrase = (document.getElementById("q_phrase_input")?.value || "").trim();
+    const qSku = (document.getElementById("q_sku_input")?.value || "").trim();
+    const params = new URLSearchParams();
+    if (qPhrase) params.set("q_phrase", qPhrase);
+    if (qSku) params.set("q_sku", qSku);
+    const qs = params.toString();
+    window.location.href = qs ? "?" + qs : window.location.pathname;
+  }
+
+  function queueAssignSearch() {
+    if (assignSearchTimer) clearTimeout(assignSearchTimer);
+    assignSearchTimer = setTimeout(doAssignSearch, 350);
+  }
+
+  function startEditPhrase(id, name, content) {
+    const nameInput = document.getElementById("new_phrase_name_input");
+    const contentInput = document.getElementById("new_phrase_content_input");
+    const editIdInput = document.getElementById("edit_phrase_id_input");
+    const addBtn = document.getElementById("btn_add_phrase");
+    if (nameInput) nameInput.value = name || "";
+    if (contentInput) contentInput.value = content || "";
+    if (editIdInput) editIdInput.value = id || "";
+    if (addBtn) addBtn.textContent = "保存编辑";
+  }
+
+  function submitDeletePhrase(id, name) {
+    const ok = window.confirm(`确认删除快捷语「${name || ""}」？`);
+    if (!ok) return false;
+    setAssignAction("delete_phrase");
+    const targetInput = document.getElementById("phrase_action_target_id_input");
+    if (targetInput) targetInput.value = id || "";
+    return true;
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    const addBtn = document.getElementById("btn_add_phrase");
+    const editIdInput = document.getElementById("edit_phrase_id_input");
+    const nameInput = document.getElementById("new_phrase_name_input");
+    const contentInput = document.getElementById("new_phrase_content_input");
+    [nameInput, contentInput].forEach((el) => {
+      if (!el) return;
+      el.addEventListener("input", function () {
+        if (addBtn && !editIdInput?.value) addBtn.textContent = "一键添加";
+      });
+    });
+
+    const qPhraseInput = document.getElementById("q_phrase_input");
+    const qSkuInput = document.getElementById("q_sku_input");
+    [qPhraseInput, qSkuInput].forEach((el) => {
+      if (!el) return;
+      el.addEventListener("input", queueAssignSearch);
+      el.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (assignSearchTimer) clearTimeout(assignSearchTimer);
+          doAssignSearch();
+        }
+      });
+    });
+  });
+</script>
+{% endblock %}

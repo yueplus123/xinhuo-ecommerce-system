@@ -1,0 +1,71 @@
+{% extends "backoffice/base.html" %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}{% if subtitle %}<p class="bb-subtitle">{{ subtitle }}</p>{% endif %}{% endblock %}
+{% block extra_head %}
+<style>
+  .bb-checklist-options {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)) !important;
+    gap: 10px !important;
+  }
+  .bb-checklist-item {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+  }
+  .bb-checklist-item input[type="checkbox"] {
+    width: 14px !important;
+    height: 14px !important;
+    min-height: 14px !important;
+    max-width: 14px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    flex: 0 0 14px !important;
+  }
+  .bb-checklist-item span {
+    margin: 0 !important;
+    text-align: left !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+  }
+</style>
+{% endblock %}
+{% block content %}
+<form method="post" class="bb-card el-card is-never-shadow bb-form-card" enctype="multipart/form-data">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="bb-form-errors">{{ form.non_field_errors }}</div>
+  {% endif %}
+  <div class="bb-grid">
+    {% for field in form.visible_fields %}
+    <div class="bb-field el-form-item{% if field.name in wide_fields %} wide{% endif %}">
+      <label class="el-form-item__label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {% if field.name in checklist_fields %}
+      <div class="bb-checklist">
+        <div class="bb-checklist-options">
+          {% for option in field %}
+          <label class="bb-checklist-item" for="{{ option.id_for_label }}">
+            {{ option.tag }}
+            <span>{{ option.choice_label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <div class="el-form-item__content">{{ field }}</div>
+      {% endif %}
+      {% if field.help_text %}<div class="bb-help">{{ field.help_text }}</div>{% endif %}
+      {{ field.errors }}
+    </div>
+    {% endfor %}
+  </div>
+  {% if related_template %}{% include related_template %}{% endif %}
+  <div class="bb-actions">
+    <button type="submit" class="bb-btn bb-btn-primary">保存</button>
+    <a class="bb-btn" href="{{ cancel_url }}">返回</a>
+    {% if delete_url %}<a class="bb-btn bb-btn-danger" href="{{ delete_url }}">删除</a>{% endif %}
+  </div>
+</form>
+{% endblock %}

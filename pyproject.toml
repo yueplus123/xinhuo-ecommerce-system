@@ -1,0 +1,32 @@
+[project]
+name = "xinhuo-e-commerce"
+version = "1.0.0"
+description = "薪火电商管理系统（Django API/后台 + Vue 前端）"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "Django>=4.2,<6.1",
+    "django-cors-headers>=4.3,<5",
+    "djangorestframework>=3.15,<4",
+    "djangorestframework-simplejwt>=5.3,<6",
+    "Pillow>=10,<13",
+    "openpyxl>=3.1,<4",
+]
+
+[project.optional-dependencies]
+production = ["gunicorn>=22,<24"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+extend-exclude = ["backend/apps/catalog/migrations"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I"]

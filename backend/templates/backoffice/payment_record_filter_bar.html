@@ -1,0 +1,36 @@
+{# 订单记录列表筛选：人员 | 渠道 | 时间选择（起止）| 查询 #}
+<section class="bb-card bb-list-filters bb-list-filters--payment-record">
+  <form method="get" class="bb-payment-filter-row">
+    <div class="bb-payment-filter__cell bb-payment-filter__cell--person">
+      <label for="{{ filter_form.user.id_for_label }}">人员</label>
+      {{ filter_form.user }}
+      {{ filter_form.user.errors }}
+    </div>
+    <div class="bb-payment-filter__cell bb-payment-filter__cell--channel">
+      <label for="{{ filter_form.channel.id_for_label }}">渠道</label>
+      {{ filter_form.channel }}
+      {{ filter_form.channel.errors }}
+    </div>
+    <div class="bb-payment-filter__cell bb-payment-filter__cell--dates">
+      <span class="bb-payment-filter__dates-heading" id="payment-filter-dates-label">订单时间</span>
+      <div class="bb-payment-filter__dates-inputs" role="group" aria-labelledby="payment-filter-dates-label">
+        <label for="{{ filter_form.date_from.id_for_label }}" class="bb-sr-only">开始日期</label>
+        {{ filter_form.date_from }}
+        <span class="bb-payment-filter__dates-sep" aria-hidden="true">至</span>
+        <label for="{{ filter_form.date_to.id_for_label }}" class="bb-sr-only">结束日期</label>
+        {{ filter_form.date_to }}
+      </div>
+      {{ filter_form.date_from.errors }}
+      {{ filter_form.date_to.errors }}
+    </div>
+    <div class="bb-payment-filter__cell bb-payment-filter__cell--actions">
+      <span class="bb-payment-filter__cell-label bb-payment-filter__cell-label--spacer" aria-hidden="true">查询</span>
+      <div class="bb-payment-filter__actions-inner">
+        <button type="submit" class="bb-btn bb-btn-primary bb-payment-filter__query-btn">查询</button>
+        {% if reset_list_url %}
+        <a class="bb-btn" href="{{ reset_list_url }}">重置</a>
+        {% endif %}
+      </div>
+    </div>
+  </form>
+</section>

@@ -1,0 +1,25 @@
+services:
+  wallos:
+    container_name: wallos
+    image: bellamy/wallos:latest
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ./db:/var/www/html/db
+      - ./logos:/var/www/html/images/uploads/logos
+    restart: unless-stopped
+    # 仅内网给代理用
+    expose:
+      - "80"
+
+  # 去掉 X-Frame-Options，允许薪火前端 iframe 嵌入
+  wallos-proxy:
+    container_name: wallos-proxy
+    image: nginx:alpine
+    depends_on:
+      - wallos
+    ports:
+      - "8282:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped

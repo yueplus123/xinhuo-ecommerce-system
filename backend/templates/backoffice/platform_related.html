@@ -1,0 +1,20 @@
+{% if object %}
+<section class="bb-subcard">
+  <div class="bb-subhead">
+    <h2>业务管理</h2>
+    <a class="bb-btn bb-btn-primary" href="{% url 'backoffice:business_add' %}?platform_id={{ object.id }}">新增业务</a>
+  </div>
+  <div class="bb-table-wrap">
+    <table class="bb-table">
+      <thead><tr><th>业务名称</th><th>状态</th><th>SKU数</th></tr></thead>
+      <tbody>
+        {% for biz in object.businesses.all %}
+        <tr><td>{{ biz.name }}</td><td>{{ biz.get_status_display }}</td><td>{{ biz.skus.count }}</td></tr>
+        {% empty %}
+        <tr><td colspan="3">暂无业务</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}

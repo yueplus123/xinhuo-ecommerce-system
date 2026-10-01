@@ -1,0 +1,13 @@
+.git
+.venv
+.env
+backups
+backend/data
+backend/media
+backend/staticfiles
+frontend/node_modules
+frontend/dist
+*.sqlite3
+*.zip
+*.tar
+*.tar.gz

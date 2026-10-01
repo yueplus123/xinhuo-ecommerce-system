@@ -1,0 +1,80 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}{% if subtitle %}<p class="bb-subtitle">{{ subtitle }}</p>{% endif %}{% endblock %}
+{% block page_actions %}
+<button type="button" class="bb-btn bb-btn-primary" id="bb-sub-rem-btn-add" data-modal-url="{{ modal_add_url }}">新增记录</button>
+{% endblock %}
+{% block extra_head %}
+<script defer src="{% static 'backoffice/subscription_reminder_modal.js' %}?v=1"></script>
+{% endblock %}
+{% block content %}
+<section class="bb-card bb-list-stats" aria-label="记录统计">
+  <p class="bb-list-stats__line">
+    <strong>全员记录合计：</strong><span class="bb-list-stats__num">{{ total_all }}</span> 条（不区分负责人，含所有职员账号下的订阅提醒）
+  </p>
+  <p class="bb-list-stats__line bb-list-stats__line--muted">
+    <strong>当前列表：</strong><span class="bb-list-stats__num">{{ total_filtered }}</span> 条（应用下方筛选条件后的结果）
+  </p>
+</section>
+{% if filter_form %}
+<section class="bb-card bb-list-filters">
+  <form method="get" action="{% url 'backoffice:subscription_reminder_list' %}">
+    {% for field in filter_form %}
+    <div class="bb-filter-field">
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {{ field.errors }}
+    </div>
+    {% endfor %}
+    <div class="bb-filter-actions">
+      <button type="submit" class="bb-btn bb-btn-primary">筛选</button>
+      {% if reset_list_url %}<a class="bb-btn" href="{{ reset_list_url }}">重置</a>{% endif %}
+    </div>
+  </form>
+</section>
+{% endif %}
+<section class="bb-card">
+  <div class="bb-table-wrap">
+    <table class="bb-table">
+      <thead><tr>{% for head in headers %}<th>{{ head }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>{% for cell in row.cells %}<td>{{ cell|safe }}</td>{% endfor %}</tr>
+        {% empty %}
+        <tr><td colspan="{{ headers|length }}">暂无数据</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.paginator.count %}
+  <nav class="bb-pagination" aria-label="订阅提醒分页">
+    <span class="bb-pagination-summary">
+      共 {{ page_obj.paginator.count }} 条，第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 页
+    </span>
+    <div class="bb-pagination-links">
+      {% if page_obj.has_previous %}
+      <a class="bb-btn" href="?{% if pagination_query %}{{ pagination_query }}&{% endif %}page={{ page_obj.previous_page_number }}">上一页</a>
+      {% else %}
+      <span class="bb-btn bb-btn-disabled">上一页</span>
+      {% endif %}
+      {% if page_obj.has_next %}
+      <a class="bb-btn" href="?{% if pagination_query %}{{ pagination_query }}&{% endif %}page={{ page_obj.next_page_number }}">下一页</a>
+      {% else %}
+      <span class="bb-btn bb-btn-disabled">下一页</span>
+      {% endif %}
+    </div>
+  </nav>
+  {% endif %}
+</section>
+<div
+  id="bb-sub-rem-overlay"
+  class="bb-modal-overlay"
+  hidden
+  {% if auto_open_modal_url %}data-auto-open="{{ auto_open_modal_url }}"{% endif %}
+>
+  <div class="bb-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="bb-sub-rem-modal-title">
+    <div id="bb-sub-rem-modal-body"></div>
+  </div>
+</div>
+{% endblock %}

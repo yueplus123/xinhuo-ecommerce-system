@@ -1,0 +1,86 @@
+{% extends "backoffice/base.html" %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}{% if subtitle %}<p class="bb-subtitle">{{ subtitle }}</p>{% endif %}{% endblock %}
+{% block content %}
+<div class="bb-tag-layout">
+  <div class="bb-tag-column">
+    <section class="bb-card bb-mb">
+      <h2 class="bb-tag-module-title">添加下方标签模块</h2>
+      <form method="post" class="bb-tag-inline-form">
+        {% csrf_token %}
+        {% if form_platform.non_field_errors %}
+        <div class="bb-message error">{{ form_platform.non_field_errors }}</div>
+        {% endif %}
+        <div class="bb-tag-add-row">
+          {% for field in form_platform %}
+          <div class="bb-field bb-tag-add-field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {{ field.errors }}
+          </div>
+          {% endfor %}
+          <div class="bb-field bb-tag-add-field bb-tag-add-field--btn">
+            <span class="bb-tag-add-field-spacer" aria-hidden="true">&nbsp;</span>
+            <button type="submit" name="save_platform" value="1" class="bb-btn bb-btn-primary">保存</button>
+          </div>
+        </div>
+      </form>
+    </section>
+    <section class="bb-card">
+      <h2 class="bb-tag-module-title">平台标签</h2>
+      <div class="bb-table-wrap">
+        <table class="bb-table">
+          <thead><tr>{% for head in tag_table_headers %}<th>{{ head }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for row in platform_rows %}
+            <tr>{% for cell in row.cells %}<td>{{ cell|safe }}</td>{% endfor %}</tr>
+            {% empty %}
+            <tr><td colspan="{{ tag_table_headers|length }}">暂无数据</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="bb-tag-column">
+    <section class="bb-card bb-mb">
+      <h2 class="bb-tag-module-title">添加下方标签模块</h2>
+      <form method="post" class="bb-tag-inline-form">
+        {% csrf_token %}
+        {% if form_channel.non_field_errors %}
+        <div class="bb-message error">{{ form_channel.non_field_errors }}</div>
+        {% endif %}
+        <div class="bb-tag-add-row">
+          {% for field in form_channel %}
+          <div class="bb-field bb-tag-add-field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {{ field.errors }}
+          </div>
+          {% endfor %}
+          <div class="bb-field bb-tag-add-field bb-tag-add-field--btn">
+            <span class="bb-tag-add-field-spacer" aria-hidden="true">&nbsp;</span>
+            <button type="submit" name="save_channel" value="1" class="bb-btn bb-btn-primary">保存</button>
+          </div>
+        </div>
+      </form>
+    </section>
+    <section class="bb-card">
+      <h2 class="bb-tag-module-title">渠道标签</h2>
+      <div class="bb-table-wrap">
+        <table class="bb-table">
+          <thead><tr>{% for head in tag_table_headers %}<th>{{ head }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for row in channel_rows %}
+            <tr>{% for cell in row.cells %}<td>{{ cell|safe }}</td>{% endfor %}</tr>
+            {% empty %}
+            <tr><td colspan="{{ tag_table_headers|length }}">暂无数据</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,66 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+{% block page_title %}编辑订单记录{% endblock %}
+{% block page_subtitle %}
+<p class="bb-subtitle">修改后职员端统计与导出会同步反映。订单时间默认保留原值，需要时可修改。</p>
+{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'backoffice/catalog_editor.css' %}?v=11">
+{% endblock %}
+{% block content %}
+<form method="post" class="bb-card payment-record-edit-form" enctype="multipart/form-data">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="bb-message error">{{ form.non_field_errors }}</div>{% endif %}
+  <div class="bb-grid">
+    {% for field in form %}
+    {% if field.name != 'note' %}
+    <div class="bb-field">
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {{ field.errors }}
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="bb-grid payment-record-note-images-row">
+    <div class="bb-field">
+      <label for="{{ form.note.id_for_label }}">{{ form.note.label }}</label>
+      {{ form.note }}
+      {{ form.note.errors }}
+    </div>
+    <div class="bb-field payment-record-images-field">
+    <label>截图</label>
+    <div class="sku-member-images" data-payment-images>
+      <div class="sku-image-grid" data-payment-image-grid>
+        {% for img in payment_images %}
+        <div class="sku-image-card" data-payment-image-card data-kind="{{ img.kind }}"{% if img.id %} data-extra-id="{{ img.id }}"{% endif %}>
+          <img src="{{ img.url }}" alt="收款截图">
+          <button type="button" class="sku-image-remove" data-remove-payment-image aria-label="删除截图">×</button>
+          {% if img.kind == "main" %}
+          <input type="checkbox" name="delete_main_screenshot" value="on" hidden class="payment-delete-main-flag">
+          {% else %}
+          <input type="checkbox" name="delete_extra_image_ids" value="{{ img.id }}" hidden class="payment-delete-extra-flag">
+          {% endif %}
+        </div>
+        {% endfor %}
+        <label class="sku-image-upload" data-payment-image-upload>
+          <input type="file" class="sku-image-file-input" name="payment_images" accept="image/*" multiple hidden>
+          <span class="sku-image-upload-inner">
+            <span class="sku-image-upload-icon" aria-hidden="true">+</span>
+            <span class="sku-image-upload-text">点击上传</span>
+          </span>
+        </label>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <div class="bb-actions">
+    <button type="submit" class="bb-btn bb-btn-primary">保存</button>
+    <a class="bb-btn" href="{{ cancel_url }}">返回</a>
+    {% if delete_url %}<a class="bb-btn bb-btn-danger" href="{{ delete_url }}">删除</a>{% endif %}
+  </div>
+</form>
+<script src="{% static 'backoffice/payment_record_edit_images.js' %}?v=1"></script>
+{% endblock %}

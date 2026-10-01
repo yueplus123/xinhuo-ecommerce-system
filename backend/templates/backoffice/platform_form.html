@@ -1,0 +1,86 @@
+{% extends "backoffice/base.html" %}
+{% load static %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}{% if subtitle %}<p class="bb-subtitle">{{ subtitle }}</p>{% endif %}{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'backoffice/catalog_editor.css' %}?v=11">
+{% endblock %}
+{% block content %}
+<form method="post" class="bb-card platform-edit-form" enctype="multipart/form-data">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="bb-message error">{{ form.non_field_errors }}</div>{% endif %}
+  <div class="bb-grid">
+    {% for field in form %}
+      {% if field.name != "url" and field.name != "note" and field.name != "platform_tags" %}
+      <div class="bb-field">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<div class="bb-help">{{ field.help_text }}</div>{% endif %}
+        {{ field.errors }}
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  <div class="bb-grid platform-url-note-row">
+    <div class="bb-field">
+      <label for="{{ form.url.id_for_label }}">{{ form.url.label }}</label>
+      {{ form.url }}
+      {{ form.url.errors }}
+    </div>
+    <div class="bb-field">
+      <label for="{{ form.note.id_for_label }}">{{ form.note.label }}</label>
+      {{ form.note }}
+      {{ form.note.errors }}
+    </div>
+  </div>
+  <div class="bb-field wide platform-tags-field">
+    <label>平台标签</label>
+    <div class="pool-chip-grid" data-platform-chip-grid>
+      {% for tag in platform_tags_all %}
+      <label class="pool-chip{% if tag.id in selected_platform_tag_ids %} is-selected{% endif %}">
+        <input
+          type="checkbox"
+          class="pool-chip-input"
+          name="platform_tags"
+          value="{{ tag.id }}"
+          {% if tag.id in selected_platform_tag_ids %}checked{% endif %}
+        />
+        <span class="pool-chip-text">{{ tag.name }}</span>
+        <span class="pool-chip-check" aria-hidden="true">✓</span>
+      </label>
+      {% endfor %}
+      <button type="button" class="pool-chip pool-chip--add" data-open-platform-tag-modal aria-label="添加平台标签">
+        <span class="pool-chip-add-icon">+</span>
+        <span class="pool-chip-text">添加标签</span>
+      </button>
+    </div>
+    {{ form.platform_tags.errors }}
+  </div>
+  {% if related_template %}{% include related_template %}{% endif %}
+  <div class="bb-actions">
+    <button type="submit" class="bb-btn bb-btn-primary">保存</button>
+    <a class="bb-btn" href="{{ cancel_url }}">返回</a>
+    {% if delete_url %}<a class="bb-btn bb-btn-danger" href="{{ delete_url }}">删除</a>{% endif %}
+  </div>
+</form>
+
+<div class="bb-modal-mask" id="platform-tag-add-modal" hidden>
+  <div class="bb-modal" role="dialog" aria-labelledby="platform-tag-add-title">
+    <h3 id="platform-tag-add-title" class="bb-modal-title">添加标签到标签池</h3>
+    <p class="bb-modal-desc">新建后自动出现在上方列表，并默认选中。</p>
+    <form method="post" action="{% url 'backoffice:platform_tag_pool_quick_add' %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ editor_return_url }}">
+      <div class="bb-field">
+        <label for="platform-tag-quick-name">标签名称</label>
+        <input type="text" id="platform-tag-quick-name" name="name" required maxlength="100" placeholder="例如：openai" autofocus>
+      </div>
+      <div class="bb-modal-actions">
+        <button type="button" class="bb-btn" data-close-platform-tag-modal>取消</button>
+        <button type="submit" class="bb-btn bb-btn-primary">添加</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script src="{% static 'backoffice/platform_form_tags.js' %}?v=1"></script>
+{% endblock %}

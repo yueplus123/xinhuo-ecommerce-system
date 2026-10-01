@@ -1,0 +1,14 @@
+services:
+  web:
+    build: .
+    ports:
+      - "127.0.0.1:8001:8001"
+    env_file:
+      - .env
+    environment:
+      BACKEND_DEBUG: "0"
+    volumes:
+      - ./backend/data:/app/backend/data
+      - ./backend/media:/app/backend/media
+      - ./backend/staticfiles:/app/backend/staticfiles
+    restart: unless-stopped

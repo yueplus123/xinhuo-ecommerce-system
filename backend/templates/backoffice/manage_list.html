@@ -1,0 +1,59 @@
+{% extends "backoffice/base.html" %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}{% if subtitle %}<p class="bb-subtitle">{{ subtitle }}</p>{% endif %}{% endblock %}
+{% block page_actions %}{% if create_url %}<a class="bb-btn bb-btn-primary" href="{{ create_url }}">{{ create_label|default:"新增" }}</a>{% endif %}{% endblock %}
+{% block content %}
+{% if filter_form %}
+  {% if filter_template %}
+    {% include filter_template with filter_form=filter_form reset_list_url=reset_list_url %}
+  {% else %}
+  <section class="bb-card bb-list-filters el-card is-never-shadow">
+    <form method="get" class="bb-filter-form">
+      {% for field in filter_form %}
+      <div class="bb-filter-field">
+        <label class="bb-filter-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {{ field.errors }}
+      </div>
+      {% endfor %}
+      <div class="bb-filter-actions">
+        <button type="submit" class="bb-btn bb-btn-primary">筛选</button>
+        {% if reset_list_url %}<a class="bb-btn" href="{{ reset_list_url }}">重置</a>{% endif %}
+      </div>
+    </form>
+  </section>
+  {% endif %}
+{% endif %}
+<section class="bb-card el-card is-never-shadow">
+  <div class="bb-table-wrap">
+    <table class="bb-table el-table__body">
+      <thead><tr>{% for head in headers %}<th>{{ head }}</th>{% endfor %}</tr></thead>
+      {% if sortable_reorder_url %}
+      <tbody id="bb-sortable-tbody" class="bb-sortable-tbody" data-reorder-url="{{ sortable_reorder_url }}">
+        {% for row in rows %}
+        <tr class="bb-sortable-row" data-sort-id="{{ row.sort_id }}">
+          {% for cell in row.cells %}<td>{{ cell|safe }}</td>{% endfor %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="{{ headers|length }}">暂无数据</td></tr>
+        {% endfor %}
+      </tbody>
+      {% else %}
+      <tbody>
+        {% for row in rows %}
+        <tr>{% for cell in row.cells %}<td>{{ cell|safe }}</td>{% endfor %}</tr>
+        {% empty %}
+        <tr><td colspan="{{ headers|length }}">暂无数据</td></tr>
+        {% endfor %}
+      </tbody>
+      {% endif %}
+    </table>
+  </div>
+  {% if sortable_reorder_url %}
+  <p id="bb-sort-saved-hint" class="bb-sort-saved-hint" hidden>排序已保存。</p>
+  {% endif %}
+</section>
+{% if sortable_reorder_url %}{% load static %}
+<script src="{% static 'backoffice/platform_list_sort.js' %}?v=3" defer></script>
+{% endif %}
+{% endblock %}
