@@ -133,6 +133,10 @@ router.beforeEach(async (to, _from, next) => {
       next('/data-screen')
       return
     }
+    if (to.meta?.requiresSuperuser && !auth.isSuperuser) {
+      next('/data-screen')
+      return
+    }
     if (auth.isGuest && !isGuestPathAllowed(to.path)) {
       next('/data-screen')
       return

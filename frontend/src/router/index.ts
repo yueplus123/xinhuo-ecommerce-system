@@ -3,6 +3,7 @@ import type { RouteRecordRaw } from 'vue-router'
 import type { App } from 'vue'
 import { Layout } from '@/utils/routerHelper'
 import { NO_RESET_WHITE_LIST } from '@/constants'
+import { manageRoutes } from './manage'
 
 export const constantRouterMap: AppRouteRecordRaw[] = [
   {
@@ -304,6 +305,7 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         name: 'CustomerAppleRedirect',
         meta: { hidden: true }
       },
+      ...manageRoutes,
       {
         path: 'manage/:pathMatch(.*)*',
         redirect: '/products',
