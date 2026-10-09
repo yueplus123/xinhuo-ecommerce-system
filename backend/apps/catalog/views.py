@@ -296,7 +296,7 @@ def backoffice_context(request):
         "backoffice_nav": sidebar,
         "backoffice_section_nav": section_nav,
         "backoffice_nav_active": active_key,
-        "backoffice_boot_json": mark_safe(json.dumps(boot, ensure_ascii=False)),
+        "backoffice_boot": boot,
     }
 
 

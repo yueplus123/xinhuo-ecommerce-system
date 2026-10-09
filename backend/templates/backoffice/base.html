@@ -86,7 +86,7 @@
     </el-container>
   </div>
 
-  <script type="application/json" id="bb-boot">{{ backoffice_boot_json }}</script>
+  {{ backoffice_boot|json_script:"bb-boot" }}
   <script src="{% static 'backoffice/vendor/vue.global.prod.js' %}?v=43"></script>
   <script src="{% static 'backoffice/vendor/element-plus.full.min.js' %}?v=43"></script>
   <script src="{% static 'backoffice/vendor/element-plus-icons.iife.min.js' %}?v=43"></script>

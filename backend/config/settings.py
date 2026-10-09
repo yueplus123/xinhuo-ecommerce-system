@@ -36,8 +36,11 @@ _SQLITE_DIR = BASE_DIR / "data"
 _SQLITE_DIR.mkdir(parents=True, exist_ok=True)
 (BASE_DIR / "media").mkdir(parents=True, exist_ok=True)
 
-SECRET_KEY = os.environ.get("BACKEND_SECRET_KEY", "backend-dev-secret-key")
-DEBUG = os.environ.get("BACKEND_DEBUG", "1").strip().lower() in ("1", "true", "yes")
+DEBUG = os.environ.get("BACKEND_DEBUG", "0").strip().lower() in ("1", "true", "yes")
+# 生产环境（DEBUG=0）必须显式配置密钥；本地开发（DEBUG=1）才允许使用内置开发密钥
+SECRET_KEY = os.environ.get("BACKEND_SECRET_KEY") or ("backend-dev-secret-key-only-for-local-debug-0000" if DEBUG else "")
+if not SECRET_KEY:
+    raise RuntimeError("未配置 BACKEND_SECRET_KEY：生产环境请在 .env 中设置强随机密钥（本地开发可设 BACKEND_DEBUG=1）。")
 ALLOWED_HOSTS = [
     x.strip()
     for x in os.environ.get("BACKEND_ALLOWED_HOSTS", "127.0.0.1,localhost,testserver").split(",")
@@ -139,6 +142,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # 登录/刷新令牌接口按 IP 限流，防暴力破解（视图上用 throttle_scope="auth"）
+    "DEFAULT_THROTTLE_RATES": {"auth": "20/min"},
 }
 
 CORS_ALLOWED_ORIGINS = [
@@ -149,6 +154,18 @@ CORS_ALLOWED_ORIGINS = [
     if x.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+# 生产环境安全加固；本地 DEBUG=1 不启用
+if not DEBUG:
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "SAMEORIGIN"
+    CSRF_TRUSTED_ORIGINS = [o.split()[0] for o in CORS_ALLOWED_ORIGINS]
+    # 站点已上 HTTPS 后，在 .env 设 BACKEND_HTTPS=1：Cookie 仅走 HTTPS，并信任反代的 X-Forwarded-Proto。
+    # 纯 HTTP 访问时不要设，否则浏览器不会回传登录 Cookie 导致无法登录。
+    if os.environ.get("BACKEND_HTTPS", "").strip().lower() in ("1", "true", "yes"):
+        SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+        SESSION_COOKIE_SECURE = True
+        CSRF_COOKIE_SECURE = True
 
 # 企业微信内部群「消息推送」Webhook（见官方文档：消息推送配置说明）
 WECOM_REMINDER_ENABLED = (os.environ.get("WECOM_REMINDER_ENABLED") or "").strip().lower() in (
