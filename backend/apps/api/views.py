@@ -1,3 +1,4 @@
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from datetime import datetime, timedelta
 
 from django.contrib.auth import get_user_model
@@ -309,7 +310,6 @@ class CommonAccountViewSet(viewsets.ModelViewSet):
             qs = qs.filter(
                 Q(platform__icontains=q)
                 | Q(account__icontains=q)
-                | Q(password__icontains=q)
                 | Q(remark__icontains=q)
             )
         return qs.order_by("-updated_at", "id")
@@ -412,6 +412,26 @@ class MeLoginLogsAPIView(APIView):
         return Response(StaffLoginLogSerializer(logs, many=True).data)
 
 
+def _filter_platforms(qs, request):
+    """平台列表 / 导出共用的关键词 + 状态筛选。"""
+    q = (request.GET.get("q") or "").strip()
+    status_val = (request.GET.get("status") or "").strip()
+    if status_val:
+        qs = qs.filter(status=status_val)
+    if q:
+        qs = qs.filter(
+            Q(name__icontains=q)
+            | Q(url__icontains=q)
+            | Q(platform_tags__name__icontains=q)
+            | Q(businesses__name__icontains=q)
+            | Q(businesses__skus__name__icontains=q)
+            | Q(businesses__skus__note__icontains=q)
+            | Q(businesses__skus__tutorial_text__icontains=q)
+            | Q(businesses__skus__quick_phrases__content__icontains=q)
+        ).distinct()
+    return qs.order_by("sort_order", "id")
+
+
 class PlatformListAPIView(generics.ListAPIView):
     permission_classes = [StaffOnlyPermission]
     guest_allowed = True
@@ -437,43 +457,7 @@ class PlatformListAPIView(generics.ListAPIView):
                 distinct=True,
             ),
         )
-        q = (self.request.GET.get("q") or "").strip()
-        status_val = (self.request.GET.get("status") or "").strip()
-        if status_val:
-            qs = qs.filter(status=status_val)
-        if q:
-            qs = qs.filter(
-                Q(name__icontains=q)
-                | Q(url__icontains=q)
-                | Q(platform_tags__name__icontains=q)
-                | Q(businesses__name__icontains=q)
-                | Q(businesses__skus__name__icontains=q)
-                | Q(businesses__skus__note__icontains=q)
-                | Q(businesses__skus__tutorial_text__icontains=q)
-                | Q(businesses__skus__quick_phrases__content__icontains=q)
-            ).distinct()
-        return qs.order_by("sort_order", "id")
-
-
-def _platforms_filtered_queryset(request):
-    """与平台列表相同的关键词 / 状态筛选。"""
-    qs = Platform.objects.all()
-    q = (request.GET.get("q") or "").strip()
-    status_val = (request.GET.get("status") or "").strip()
-    if status_val:
-        qs = qs.filter(status=status_val)
-    if q:
-        qs = qs.filter(
-            Q(name__icontains=q)
-            | Q(url__icontains=q)
-            | Q(platform_tags__name__icontains=q)
-            | Q(businesses__name__icontains=q)
-            | Q(businesses__skus__name__icontains=q)
-            | Q(businesses__skus__note__icontains=q)
-            | Q(businesses__skus__tutorial_text__icontains=q)
-            | Q(businesses__skus__quick_phrases__content__icontains=q)
-        ).distinct()
-    return qs.order_by("sort_order", "id")
+        return _filter_platforms(qs, self.request)
 
 
 class PlatformBusinessExportAPIView(APIView):
@@ -488,7 +472,7 @@ class PlatformBusinessExportAPIView(APIView):
 
         # 仅在售业务；禁售 / 待测试（测试）一律不导出
         on_sale_businesses = Business.objects.filter(status=Business.STATUS_ON_SALE).order_by("id")
-        platforms = _platforms_filtered_queryset(request).prefetch_related(
+        platforms = _filter_platforms(Platform.objects.all(), request).prefetch_related(
             Prefetch("businesses", queryset=on_sale_businesses)
         )
         lines = []
@@ -592,11 +576,13 @@ class PaymentBatchSubmitAPIView(APIView):
                 order_count = 0
             amount_raw = request.POST.get(f"amount_{idx}", "0") or "0"
             try:
-                amount_val = float(amount_raw)
-            except (TypeError, ValueError):
-                amount_val = 0.0
+                amount_val = Decimal(str(amount_raw).strip()).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                if not amount_val.is_finite() or abs(amount_val) >= Decimal("1e12"):
+                    raise ValueError
+            except (InvalidOperation, ValueError):
+                amount_val = Decimal("0")
             note = request.POST.get(f"note_{idx}", "")[:500]
-            if order_count <= 0 and amount_val <= 0:
+            if channel not in {c[0] for c in PAYMENT_CHANNELS} or (order_count <= 0 and amount_val <= 0):
                 continue
             order_md = request.POST.get(f"order_md_{idx}", "")
             order_at = _payment_order_datetime(order_md)
@@ -896,17 +882,37 @@ class StaffUsersListAPIView(APIView):
         return Response(UserSerializer(qs, many=True).data)
 
 
-class PaymentTutorialListAPIView(generics.ListAPIView):
+class _NamedListAPIView(generics.ListAPIView):
+    """职员端只读列表公共基类：按 ordering 排序，可选 is_active 过滤，按 name_params 中的参数名模糊匹配 name。"""
+
     permission_classes = [StaffOnlyPermission]
-    guest_allowed = True
-    serializer_class = PaymentTutorialSerializer
+    model = None
+    ordering = ("sort_order", "id")
+    only_active = False
+    name_params = ("name",)
+    search_fields_extra = ()  # 额外一起匹配的字段（OR）
 
     def get_queryset(self):
-        qs = PaymentTutorial.objects.all().order_by("sort_order", "id")
-        name = (self.request.GET.get("name") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+        qs = self.model.objects.all()
+        if self.only_active:
+            qs = qs.filter(is_active=True)
+        kw = ""
+        for param in self.name_params:
+            kw = (self.request.GET.get(param) or "").strip()
+            if kw:
+                break
+        if kw:
+            cond = Q(name__icontains=kw)
+            for f in self.search_fields_extra:
+                cond |= Q(**{f"{f}__icontains": kw})
+            qs = qs.filter(cond)
+        return qs.order_by(*self.ordering)
+
+
+class PaymentTutorialListAPIView(_NamedListAPIView):
+    guest_allowed = True
+    serializer_class = PaymentTutorialSerializer
+    model = PaymentTutorial
 
 
 class PlatformAccountListAPIView(generics.ListAPIView):
@@ -917,107 +923,61 @@ class PlatformAccountListAPIView(generics.ListAPIView):
         return PlatformAccount.objects.order_by("sort_order", "id")
 
 
-class SharedAppleIDPageListAPIView(generics.ListAPIView):
-    permission_classes = [StaffOnlyPermission]
+class SharedAppleIDPageListAPIView(_NamedListAPIView):
     serializer_class = SharedAppleIDPageSerializer
-
-    def get_queryset(self):
-        qs = SharedAppleIDPage.objects.filter(is_active=True).order_by("sort_order", "id")
-        name = (self.request.GET.get("name") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = SharedAppleIDPage
+    only_active = True
 
 
-class PictCartPageListAPIView(generics.ListAPIView):
-    permission_classes = [StaffOnlyPermission]
+class PictCartPageListAPIView(_NamedListAPIView):
     serializer_class = PictCartPageSerializer
-
-    def get_queryset(self):
-        qs = PictCartPage.objects.filter(is_active=True).order_by("sort_order", "id")
-        name = (self.request.GET.get("name") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = PictCartPage
+    only_active = True
 
 
-class FanboxStatsPageListAPIView(generics.ListAPIView):
+class FanboxStatsPageListAPIView(_NamedListAPIView):
     """游客也可读（前端 fanbox 页对游客开放）。"""
 
-    permission_classes = [StaffOnlyPermission]
     serializer_class = FanboxStatsPageSerializer
     guest_allowed = True
-
-    def get_queryset(self):
-        qs = FanboxStatsPage.objects.filter(is_active=True).order_by("sort_order", "id")
-        name = (self.request.GET.get("name") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = FanboxStatsPage
+    only_active = True
 
 
-class ServiceMonitorPageListAPIView(generics.ListAPIView):
-    permission_classes = [StaffOnlyPermission]
+class ServiceMonitorPageListAPIView(_NamedListAPIView):
     serializer_class = ServiceMonitorPageSerializer
-
-    def get_queryset(self):
-        qs = ServiceMonitorPage.objects.filter(is_active=True).order_by("sort_order", "id")
-        name = (self.request.GET.get("name") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = ServiceMonitorPage
+    only_active = True
 
 
-class PlatformTagPoolListAPIView(generics.ListAPIView):
-    permission_classes = [StaffOnlyPermission]
+class PlatformTagPoolListAPIView(_NamedListAPIView):
     serializer_class = PlatformTagPoolSerializer
-
-    def get_queryset(self):
-        qs = PlatformTagPool.objects.all().order_by("order", "id")
-        name = (self.request.GET.get("name") or self.request.GET.get("q") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = PlatformTagPool
+    ordering = ("order", "id")
+    name_params = ("name", "q")
 
 
-class ChannelTagPoolListAPIView(generics.ListAPIView):
-    permission_classes = [StaffOnlyPermission]
+class ChannelTagPoolListAPIView(_NamedListAPIView):
     serializer_class = ChannelTagPoolSerializer
-
-    def get_queryset(self):
-        qs = ChannelTagPool.objects.all().order_by("order", "id")
-        name = (self.request.GET.get("name") or self.request.GET.get("q") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = ChannelTagPool
+    ordering = ("order", "id")
+    name_params = ("name", "q")
 
 
-class TutorialPoolListAPIView(generics.ListAPIView):
+class TutorialPoolListAPIView(_NamedListAPIView):
     """教程池列表（职员端浏览 / 后续 SKU 选取）。"""
 
-    permission_classes = [StaffOnlyPermission]
     serializer_class = TutorialPoolSerializer
-
-    def get_queryset(self):
-        qs = TutorialPool.objects.all().order_by("sort_order", "id")
-        name = (self.request.GET.get("name") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = TutorialPool
 
 
-class PhrasePoolListAPIView(generics.ListAPIView):
+class PhrasePoolListAPIView(_NamedListAPIView):
     """话术池列表（后续 SKU 选取）。"""
 
-    permission_classes = [StaffOnlyPermission]
     serializer_class = PhrasePoolSerializer
-
-    def get_queryset(self):
-        qs = PhrasePool.objects.all().order_by("sort_order", "id")
-        q = (self.request.GET.get("q") or self.request.GET.get("name") or "").strip()
-        if q:
-            qs = qs.filter(Q(name__icontains=q) | Q(content__icontains=q))
-        return qs
+    model = PhrasePool
+    name_params = ("q", "name")
+    search_fields_extra = ("content",)
 
 
 class UsdProxyPriceTierListAPIView(generics.ListAPIView):

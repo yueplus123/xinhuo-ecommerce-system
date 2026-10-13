@@ -1,6 +1,6 @@
 # 后端（Django）
 
-与 Vue 前端配套的业务 API 与管理后台（`/backoffice/`）。
+纯 API 服务：为职员端（`frontend/`）和管理后台（`admin/`）提供接口，**不含任何页面**。
 
 ## 运行
 
@@ -23,9 +23,10 @@ python manage.py create_dev_user --username admin --reset --password 你的新�
 
 ## 入口
 
-- 管理后台：`http://127.0.0.1:8001/backoffice/`
-- Django Admin：`http://127.0.0.1:8001/django-admin/`
-- API：`http://127.0.0.1:8001/api/`
+- API：`http://127.0.0.1:8001/api/`（登录：`POST /api/auth/token/`，刷新：`/api/auth/token/refresh/`）
+- 页面都在前端：职员端 `frontend/`，管理后台 `admin/`（线上 `/admin/`）。后端本身没有页面，访问 `/` 得到 404 属正常。
+
+接口分区：职员端 `views.py`；记账 `ledger_views.py`；管理后台 `manage_*.py`、`admin_catalog_views.py`；机器人 / 外部系统 `/api/external/…`（API Key 鉴权）。
 
 ## 数据库
 
@@ -42,4 +43,4 @@ python manage.py clear_demo_data
 ```
 
 默认会同时删除 `example.com/tutorial` 的演示支付教程；若要保留请加 `--keep-example-tutorials`。  
-**大厅板块、自建平台账号等**不在上述规则内的，请自行在后台删除或编辑。
+**大厅板块、自建平台账号等**不在上述规则内的，请自行在管理后台（`/admin/`）删除或编辑。

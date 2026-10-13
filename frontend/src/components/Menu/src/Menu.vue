@@ -79,6 +79,12 @@ export default defineComponent({
       return path
     })
 
+    /** 菜单 index 对应的外链（route.meta.externalUrl）；没有则返回空串 */
+    const findExternalUrl = (index: string): string => {
+      const hit = unref(routers).find((r) => r.path === index)
+      return (hit?.meta?.externalUrl as string) || ''
+    }
+
     const menuSelect = (index: string) => {
       if (props.menuSelect) {
         props.menuSelect(index)
@@ -86,9 +92,15 @@ export default defineComponent({
       // 自定义事件
       if (isUrl(index)) {
         window.open(index)
-      } else {
-        push(index)
+        return
       }
+      // 外链菜单项（meta.externalUrl）：新标签页打开，不改变当前页面
+      const ext = findExternalUrl(index)
+      if (ext) {
+        window.open(ext, '_blank', 'noopener,noreferrer')
+        return
+      }
+      push(index)
     }
 
     const renderMenuWrap = () => {
@@ -203,125 +215,37 @@ export default defineComponent({
       margin-top: 14px !important;
     }
 
-    .@{elNamespace}-menu-item.nav-group-1,
-    .@{elNamespace}-sub-menu.nav-group-1 > .@{elNamespace}-sub-menu__title {
-      background-color: #eef5ff !important;
-      color: #3b5bdb !important;
-      .v-menu__icon {
-        color: #3b5bdb !important;
+    // 6 组颜色全部走 CSS 变量（--nav-g{n}-bg / -bg-active / -fg），亮色 / 暗色的具体色值在 styles/theme.css。
+    // 这里只写一份规则：新增分组只需在 theme.css 加变量，切换暗色也不会再有选择器优先级之争。
+    .nav-group-rule(@n) {
+      .@{elNamespace}-menu-item.nav-group-@{n},
+      .@{elNamespace}-sub-menu.nav-group-@{n} > .@{elNamespace}-sub-menu__title {
+        background-color: var(~'--nav-g@{n}-bg') !important;
+        color: var(~'--nav-g@{n}-fg') !important;
+        .v-menu__icon {
+          color: var(~'--nav-g@{n}-fg') !important;
+        }
+      }
+      .@{elNamespace}-menu-item.nav-group-@{n}.is-active,
+      .@{elNamespace}-menu-item.nav-group-@{n}:hover,
+      .@{elNamespace}-sub-menu.nav-group-@{n}.is-active > .@{elNamespace}-sub-menu__title,
+      .@{elNamespace}-sub-menu.nav-group-@{n} > .@{elNamespace}-sub-menu__title:hover {
+        background-color: var(~'--nav-g@{n}-bg-active') !important;
+        color: var(~'--nav-g@{n}-fg') !important;
+        box-shadow:
+          inset 3px 0 0 var(~'--nav-g@{n}-fg'),
+          inset -3px 0 0 var(~'--nav-g@{n}-fg');
+        .v-menu__icon {
+          color: var(~'--nav-g@{n}-fg') !important;
+        }
       }
     }
-    .@{elNamespace}-menu-item.nav-group-1.is-active,
-    .@{elNamespace}-menu-item.nav-group-1:hover,
-    .@{elNamespace}-sub-menu.nav-group-1.is-active > .@{elNamespace}-sub-menu__title,
-    .@{elNamespace}-sub-menu.nav-group-1 > .@{elNamespace}-sub-menu__title:hover {
-      background-color: #d0e2ff !important;
-      color: #3b5bdb !important;
-      box-shadow: inset 3px 0 0 #3b5bdb, inset -3px 0 0 #3b5bdb;
-      .v-menu__icon {
-        color: #3b5bdb !important;
-      }
-    }
-
-    .@{elNamespace}-menu-item.nav-group-2,
-    .@{elNamespace}-sub-menu.nav-group-2 > .@{elNamespace}-sub-menu__title {
-      background-color: #eefbf3 !important;
-      color: #2f9e44 !important;
-      .v-menu__icon {
-        color: #2f9e44 !important;
-      }
-    }
-    .@{elNamespace}-menu-item.nav-group-2.is-active,
-    .@{elNamespace}-menu-item.nav-group-2:hover,
-    .@{elNamespace}-sub-menu.nav-group-2.is-active > .@{elNamespace}-sub-menu__title,
-    .@{elNamespace}-sub-menu.nav-group-2 > .@{elNamespace}-sub-menu__title:hover {
-      background-color: #d3f9d8 !important;
-      color: #2f9e44 !important;
-      box-shadow: inset 3px 0 0 #2f9e44, inset -3px 0 0 #2f9e44;
-      .v-menu__icon {
-        color: #2f9e44 !important;
-      }
-    }
-
-    .@{elNamespace}-menu-item.nav-group-3,
-    .@{elNamespace}-sub-menu.nav-group-3 > .@{elNamespace}-sub-menu__title {
-      background-color: #fff8e8 !important;
-      color: #b98900 !important;
-      .v-menu__icon {
-        color: #b98900 !important;
-      }
-    }
-    .@{elNamespace}-menu-item.nav-group-3.is-active,
-    .@{elNamespace}-menu-item.nav-group-3:hover,
-    .@{elNamespace}-sub-menu.nav-group-3.is-active > .@{elNamespace}-sub-menu__title,
-    .@{elNamespace}-sub-menu.nav-group-3 > .@{elNamespace}-sub-menu__title:hover {
-      background-color: #ffe8a3 !important;
-      color: #b98900 !important;
-      box-shadow: inset 3px 0 0 #b98900, inset -3px 0 0 #b98900;
-      .v-menu__icon {
-        color: #b98900 !important;
-      }
-    }
-
-    .@{elNamespace}-menu-item.nav-group-4,
-    .@{elNamespace}-sub-menu.nav-group-4 > .@{elNamespace}-sub-menu__title {
-      background-color: #e8f7fb !important;
-      color: #0c8599 !important;
-      .v-menu__icon {
-        color: #0c8599 !important;
-      }
-    }
-    .@{elNamespace}-menu-item.nav-group-4.is-active,
-    .@{elNamespace}-menu-item.nav-group-4:hover,
-    .@{elNamespace}-sub-menu.nav-group-4.is-active > .@{elNamespace}-sub-menu__title,
-    .@{elNamespace}-sub-menu.nav-group-4 > .@{elNamespace}-sub-menu__title:hover {
-      background-color: #c5f6fa !important;
-      color: #0c8599 !important;
-      box-shadow: inset 3px 0 0 #0c8599, inset -3px 0 0 #0c8599;
-      .v-menu__icon {
-        color: #0c8599 !important;
-      }
-    }
-
-    .@{elNamespace}-menu-item.nav-group-5,
-    .@{elNamespace}-sub-menu.nav-group-5 > .@{elNamespace}-sub-menu__title {
-      background-color: #f4f6f8 !important;
-      color: #495057 !important;
-      .v-menu__icon {
-        color: #495057 !important;
-      }
-    }
-    .@{elNamespace}-menu-item.nav-group-5.is-active,
-    .@{elNamespace}-menu-item.nav-group-5:hover,
-    .@{elNamespace}-sub-menu.nav-group-5.is-active > .@{elNamespace}-sub-menu__title,
-    .@{elNamespace}-sub-menu.nav-group-5 > .@{elNamespace}-sub-menu__title:hover {
-      background-color: #dee2e6 !important;
-      color: #495057 !important;
-      box-shadow: inset 3px 0 0 #495057, inset -3px 0 0 #495057;
-      .v-menu__icon {
-        color: #495057 !important;
-      }
-    }
-
-    .@{elNamespace}-menu-item.nav-group-6,
-    .@{elNamespace}-sub-menu.nav-group-6 > .@{elNamespace}-sub-menu__title {
-      background-color: #f8f0fc !important;
-      color: #9c36b5 !important;
-      .v-menu__icon {
-        color: #9c36b5 !important;
-      }
-    }
-    .@{elNamespace}-menu-item.nav-group-6.is-active,
-    .@{elNamespace}-menu-item.nav-group-6:hover,
-    .@{elNamespace}-sub-menu.nav-group-6.is-active > .@{elNamespace}-sub-menu__title,
-    .@{elNamespace}-sub-menu.nav-group-6 > .@{elNamespace}-sub-menu__title:hover {
-      background-color: #eebefa !important;
-      color: #9c36b5 !important;
-      box-shadow: inset 3px 0 0 #9c36b5, inset -3px 0 0 #9c36b5;
-      .v-menu__icon {
-        color: #9c36b5 !important;
-      }
-    }
+    .nav-group-rule(1);
+    .nav-group-rule(2);
+    .nav-group-rule(3);
+    .nav-group-rule(4);
+    .nav-group-rule(5);
+    .nav-group-rule(6);
 
     .@{elNamespace}-menu-item.nav-group-1.is-active,
     .@{elNamespace}-menu-item.nav-group-2.is-active,

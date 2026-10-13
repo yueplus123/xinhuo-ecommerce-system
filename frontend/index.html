@@ -5,6 +5,20 @@
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title><%= title %></title>
+    <!-- 防闪烁：在页面首次绘制前就套用主题（浅色 / 暗色），避免刷新时先白后黑 -->
+    <script>
+      ;(function () {
+        try {
+          var saved = localStorage.getItem('xinhuo-theme')
+          var dark =
+            saved === 'dark' ||
+            (saved !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          var root = document.documentElement
+          root.classList.add(dark ? 'dark' : 'light')
+          root.classList.remove(dark ? 'light' : 'dark')
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="app">
@@ -17,6 +31,11 @@
           align-items: center;
           flex-direction: column;
           background: #f0f2f5;
+        }
+
+        html.dark .app-loading {
+          background: #0d1117;
+          color: #e6edf3;
         }
 
         .app-loading .app-loading-wrap {

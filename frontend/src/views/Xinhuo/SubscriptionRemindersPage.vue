@@ -25,6 +25,7 @@ import {
   deleteSubscriptionReminder
 } from '@/api/xinhuo/subscriptionReminders'
 import { formatRequestError, formatDateTime } from '@/utils/format'
+import { addMonthsYmd, daysFromToday, isoToDateOnly, todayYmd } from '@/utils/ymd'
 
 defineOptions({ name: 'SubscriptionReminders' })
 
@@ -65,42 +66,16 @@ const searchSchema = ref<FormSchema[]>([
   }
 ])
 
-function pad2(n: number) {
-  return String(n).padStart(2, '0')
-}
-
-function nowDateValue() {
-  const d = new Date()
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
-}
-
-function isoToDateOnly(iso: string) {
-  if (!iso) return ''
-  const m = String(iso).match(/^(\d{4}-\d{2}-\d{2})/)
-  return m ? m[1] : ''
-}
-
-function parseLocalYmd(s: string) {
-  const ymd = isoToDateOnly(s)
-  if (!ymd) return null
-  const p = ymd.split('-').map(Number)
-  if (p.length !== 3 || p.some((n) => Number.isNaN(n))) return null
-  return new Date(p[0], p[1] - 1, p[2])
-}
-
 function formatReminderDate(ymdOrIso: string) {
   const s = isoToDateOnly(ymdOrIso)
   return s || '—'
 }
 
 function statusLabel(ymdOrIso: string) {
-  const d = parseLocalYmd(ymdOrIso)
-  if (!d || Number.isNaN(d.getTime())) return '—'
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const t0 = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  if (t0 < today) return '已逾期'
-  if (t0.getTime() === today.getTime()) return '今日待跟进'
+  const diff = daysFromToday(ymdOrIso)
+  if (diff === null) return '—'
+  if (diff < 0) return '已逾期'
+  if (diff === 0) return '今日待跟进'
   return '待提醒'
 }
 
@@ -109,13 +84,6 @@ function statusTagType(ymdOrIso: string): 'danger' | 'warning' | 'success' | 'in
   if (lab === '已逾期') return 'danger'
   if (lab === '今日待跟进') return 'warning'
   return 'success'
-}
-
-function addMonthsToDateStr(ymd: string, months: number) {
-  const d = parseLocalYmd(ymd)
-  if (!d) return ''
-  d.setMonth(d.getMonth() + months)
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
 }
 
 function queryPlatform(queryString: string, cb: (results: { value: string }[]) => void) {
@@ -232,13 +200,13 @@ async function saveEdit() {
 
 function openRenew(r: any) {
   renewRow.value = r
-  renewDate.value = isoToDateOnly(r.next_reminder_at) || nowDateValue()
+  renewDate.value = isoToDateOnly(r.next_reminder_at) || todayYmd()
   renewOpen.value = true
 }
 
 function bumpRenew(months: number) {
-  const base = renewDate.value || nowDateValue()
-  renewDate.value = addMonthsToDateStr(base, months)
+  const base = renewDate.value || todayYmd()
+  renewDate.value = addMonthsYmd(base, months)
 }
 
 async function confirmRenew() {

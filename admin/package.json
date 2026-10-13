@@ -1,0 +1,30 @@
+{
+  "name": "xinhuo-admin-console",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit --skipLibCheck && vite build",
+    "build:fast": "vite build",
+    "preview": "vite preview",
+    "ts:check": "vue-tsc --noEmit --skipLibCheck"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "axios": "^1.7.9",
+    "dayjs": "^1.11.13",
+    "element-plus": "2.9.2",
+    "pinia": "^2.3.0",
+    "vue": "3.5.13",
+    "vue-draggable-plus": "^0.6.0",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "5.7.3",
+    "vite": "6.0.7",
+    "vue-tsc": "^2.2.0"
+  }
+}

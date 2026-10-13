@@ -3,7 +3,6 @@ import { loadEnv } from 'vite'
 import type { UserConfig, ConfigEnv } from 'vite'
 import Vue from '@vitejs/plugin-vue'
 import VueJsx from '@vitejs/plugin-vue-jsx'
-import react from '@vitejs/plugin-react'
 import progress from 'vite-plugin-progress'
 import { ViteEjsPlugin } from 'vite-plugin-ejs'
 import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
@@ -35,70 +34,13 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
           defineModel: true
         }
       }),
-      // 必须先让 React 处理 ledger-app；路径兼容 Windows 反斜杠
-      react({
-        include: [/[/\\]ledger-app[/\\].*\.[jt]sx$/],
-        exclude: [/node_modules/],
-        jsxRuntime: 'automatic',
-        jsxImportSource: 'react'
-      }),
-      // Vue JSX：覆盖 src 下所有 Vue JSX / `<script lang="tsx">`，唯独排除记账 React
+      // Vue JSX：覆盖 src 下所有 Vue JSX / `<script lang="tsx">`
       VueJsx({
         include: [
           /[/\\]src[/\\].*\.[jt]sx$/,
           /\.vue\?[^\n]*lang\.[jt]sx/
-        ],
-        exclude: [/[/\\]ledger-app[/\\]/]
+        ]
       }),
-      // 仅对 ledger-app 启用 React JSX；其它文件留给 Vue JSX，避免登录页 [object Object]
-      {
-        name: 'fix-esbuild-jsx-for-react-ledger',
-        config() {
-          return {
-            esbuild: {
-              include: [/[/\\]ledger-app[/\\].*\.[jt]sx$/],
-              jsx: 'automatic',
-              jsxImportSource: 'react'
-            }
-          }
-        }
-      },
-      // 构建后自检：禁止再出现「小体积 Vue JSX helper 被 mount 引用」
-      {
-        name: 'assert-ledger-uses-react-jsx',
-        generateBundle(_opts, bundle) {
-          const isVueJsxHelper = (code: string) =>
-            code.length < 800 &&
-            /delete \w+\.children/.test(code) &&
-            /from\s*["'][^"']*vue-chunks/.test(code)
-
-          const mountChunks = Object.entries(bundle).filter(
-            ([fileName, chunk]) =>
-              chunk.type === 'chunk' &&
-              /assets\/mount-[^/]+\.js$/.test(fileName.replace(/\\/g, '/')) &&
-              /mountLedgerApp/.test((chunk as any).code || '')
-          )
-          if (!mountChunks.length) {
-            throw new Error('[ledger-jsx] mountLedgerApp chunk not found in bundle')
-          }
-          for (const [fileName, chunk] of mountChunks) {
-            const imports: string[] = (chunk as any).imports || []
-            for (const imp of imports) {
-              const key = Object.keys(bundle).find(
-                (k) => k === imp || k.endsWith('/' + imp) || k.replace(/\\/g, '/') === imp
-              )
-              if (!key) continue
-              const imported = bundle[key]
-              if (imported.type !== 'chunk') continue
-              if (isVueJsxHelper(imported.code || '')) {
-                throw new Error(
-                  `[ledger-jsx] ${fileName} imports Vue JSX helper ${key}; React ledger would white-screen`
-                )
-              }
-            }
-          }
-        }
-      },
       // ServerUrlCopy 会拖慢启动，开发环境关掉
       // progress 保留轻量进度即可
       progress(),
@@ -129,7 +71,6 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
     },
     resolve: {
       extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json', '.less', '.css'],
-      dedupe: ['react', 'react-dom'],
       alias: [
         {
           find: 'vue-i18n',
@@ -189,11 +130,6 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
         '/media': {
           target: process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8001',
           changeOrigin: true
-        },
-        '/ledger-api': {
-          target: process.env.VITE_LEDGER_PROXY_TARGET || 'http://127.0.0.1:3001',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/ledger-api/, '') || '/'
         }
       },
       hmr: {

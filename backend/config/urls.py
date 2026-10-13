@@ -1,17 +1,10 @@
 from django.conf import settings
-from django.contrib import admin
-from django.contrib.auth import views as auth_views
-from django.urls import include, path
 from django.conf.urls.static import static
+from django.urls import include, path
 
-from backend.apps.catalog import views as catalog_views
-
+# 后端是纯 API 服务：不再提供任何 HTML 页面（登录页 / Django admin 均已移除）。
+# 页面分别由 frontend（职员端）与 admin（管理后台）两个独立前端应用提供。
 urlpatterns = [
-    path("django-admin/", admin.site.urls),
-    path("accounts/login/", auth_views.LoginView.as_view(template_name="registration/login.html"), name="login"),
-    path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
-    path("", catalog_views.home, name="home"),
-    path("backoffice/", include("backend.apps.catalog.urls", namespace="backoffice")),
     path("api/", include("backend.apps.api.urls", namespace="api")),
 ]
 

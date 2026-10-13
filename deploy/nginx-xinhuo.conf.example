@@ -1,35 +1,19 @@
-# 示例：职员端 Vue + Django API/后台 + 静态资源（复制到 /etc/nginx/conf.d/ 并按实际 IP/路径调整）
-# 要点：
-# 1) default_server：避免 Host 为 127.0.0.1 等请求落到「只反代 Gunicorn」的默认站点，导致 /static、/media、/assets 全 404
-# 2) 显式 location /assets/：Vue 打包的 JS/CSS，不依赖 try_files 兜底
-# 3) /static/ 对应 collectstatic 输出目录 backend/staticfiles/
+# 薪火电商：前后端分离部署（同一个 IP / 域名下按路径分流）
+#
+#   /        职员端前端   → frontend/dist
+#   /admin/  管理后台前端 → admin/dist      （独立应用，自己的登录页，仅超级管理员可登录）
+#   /api/    后端 API     → gunicorn 127.0.0.1:8001（纯 API，不含任何页面）
+#   /media/  上传文件     → backend/media
+#
+# 使用：复制到 /etc/nginx/conf.d/xinhuo.conf，把 APP_ROOT 与 server_name 改成实际值，nginx -t 后 reload。
 
 server {
-    listen 80 default_server;
-    server_name 192.144.236.133 127.0.0.1 localhost;
+    listen 80;
+    server_name 192.144.236.133;
 
     client_max_body_size 50M;
 
-    location /static/ {
-        alias /opt/xinhuo/xinhuo-app/backend/staticfiles/;
-        access_log off;
-        expires 7d;
-    }
-
-    location /media/ {
-        alias /opt/xinhuo/xinhuo-app/backend/media/;
-        access_log off;
-        expires 1d;
-    }
-
-    # Vue 生产构建（Vite）生成的 hashed 资源
-    location /assets/ {
-        alias /opt/xinhuo/xinhuo-app/frontend/dist/assets/;
-        access_log off;
-        expires 7d;
-        add_header Cache-Control "public, immutable";
-    }
-
+    # ---------- 后端 API ----------
     location /api/ {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -38,32 +22,22 @@ server {
         proxy_pass http://127.0.0.1:8001;
     }
 
-    location /django-admin/ {
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_pass http://127.0.0.1:8001;
+    # ---------- 上传文件 ----------
+    location /media/ {
+        alias /var/www/xinhuo/app/backend/media/;
     }
 
-    location /backoffice/ {
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_pass http://127.0.0.1:8001;
+    # ---------- 管理后台前端（/admin/） ----------
+    # 注意：alias 末尾必须带 /；SPA 回退到 admin 自己的 index.html
+    location /admin/ {
+        alias /var/www/xinhuo/app/admin/dist/;
+        index index.html;
+        try_files $uri $uri/ /admin/index.html;
     }
 
-    location /accounts/ {
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_pass http://127.0.0.1:8001;
-    }
-
+    # ---------- 职员端前端（其余所有路径） ----------
     location / {
-        root /opt/xinhuo/xinhuo-app/frontend/dist;
+        root /var/www/xinhuo/app/frontend/dist;
         try_files $uri $uri/ /index.html;
     }
 }

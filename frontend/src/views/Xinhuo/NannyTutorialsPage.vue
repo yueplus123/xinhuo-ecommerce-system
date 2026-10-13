@@ -67,7 +67,7 @@ const columns: TableColumn[] = [
     slots: {
       default: (data) =>
         data.row.detail_url ? (
-          <ElLink href={data.row.detail_url} target="_blank" rel="noopener noreferrer" type="primary">
+          <ElLink href={data.row.detail_url} target="_blank" type="primary">
             {data.row.detail_url}
           </ElLink>
         ) : (

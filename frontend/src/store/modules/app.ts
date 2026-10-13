@@ -35,6 +35,23 @@ interface AppState {
   fixedMenu: boolean
 }
 
+// 暗色模式下的布局颜色（GitHub Primer dark）。这些变量由 setCssVarTheme 以行内样式写到 <html>，
+// 优先级高于任何样式表，所以必须由 store 在写变量时叠加，而不能只靠 CSS 覆盖。
+const DARK_LAYOUT_THEME: Recordable = {
+  leftMenuBorderColor: '#21262d',
+  leftMenuBgColor: '#010409',
+  leftMenuBgLightColor: '#161b22',
+  leftMenuBgActiveColor: '#12233f',
+  leftMenuCollapseBgActiveColor: '#12233f',
+  leftMenuTextColor: '#8b949e',
+  leftMenuTextActiveColor: '#e6edf3',
+  logoTitleTextColor: '#e6edf3',
+  logoBorderColor: '#21262d',
+  topHeaderBgColor: '#161b22',
+  topHeaderTextColor: '#e6edf3',
+  topHeaderHoverColor: '#1c2128',
+  topToolBorderColor: '#30363d'
+}
 export const useAppStore = defineStore('app', {
   state: (): AppState => {
     return {
@@ -222,6 +239,8 @@ export const useAppStore = defineStore('app', {
       this.title = title
     },
     setIsDark(isDark: boolean) {
+      // 暗色的布局色只在 setCssVarTheme 写 CSS 变量时叠加（不写进持久化的 this.theme），
+      // 所以切回白天只要重写一遍变量即可原样恢复，且刷新后无论谁先调用 setCssVarTheme 都与 isDark 一致。
       this.isDark = isDark
       if (this.isDark) {
         document.documentElement.classList.add('dark')
@@ -230,7 +249,7 @@ export const useAppStore = defineStore('app', {
         document.documentElement.classList.add('light')
         document.documentElement.classList.remove('dark')
       }
-      this.setPrimaryLight()
+      this.setCssVarTheme()
     },
     setCurrentSize(currentSize: ComponentSize) {
       this.currentSize = currentSize
@@ -242,8 +261,11 @@ export const useAppStore = defineStore('app', {
       this.theme = Object.assign(this.theme, theme)
     },
     setCssVarTheme() {
-      for (const key in this.theme) {
-        setCssVar(`--${humpToUnderline(key)}`, this.theme[key])
+      // 启动时 ConfigGlobal / Layout 都会调用本函数，且 this.theme 里是「持久化下来的」布局色（可能是上次的浅色）。
+      // 为保证无论谁调用，写到 <html> 的布局色都和当前 isDark 一致，这里在暗色时强制覆盖布局键。
+      const effective: Recordable = this.isDark ? { ...this.theme, ...DARK_LAYOUT_THEME } : this.theme
+      for (const key in effective) {
+        setCssVar(`--${humpToUnderline(key)}`, effective[key])
       }
       this.setPrimaryLight()
     },
@@ -310,11 +332,26 @@ export const useAppStore = defineStore('app', {
       }
     },
     initTheme() {
+      // 主题偏好的唯一来源是 localStorage['xinhuo-theme']（index.html 的防闪烁脚本也读它）：
+      // 'dark' / 'light' 为用户手动选择；没有选择过则跟随系统的深色偏好。
+      let saved: string | null = null
+      try {
+        saved = localStorage.getItem('xinhuo-theme')
+      } catch {
+        /* 隐私模式下不可读，当作未选择 */
+      }
+      const prefersDark =
+        typeof window !== 'undefined' &&
+        !!window.matchMedia &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches
+      const dark = saved === 'dark' || (saved !== 'light' && prefersDark)
+
       const isDark = useDark({
         valueDark: 'dark',
         valueLight: 'light'
       })
-      isDark.value = this.getIsDark
+      this.setIsDark(dark) // 同步 store + <html> 的 dark 类 + 主色派生变量
+      isDark.value = dark
       const newTitle = import.meta.env.VITE_APP_TITLE
       newTitle !== this.getTitle && this.setTitle(newTitle)
     }

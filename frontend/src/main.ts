@@ -21,6 +21,8 @@ import { setupElementPlus } from '@/plugins/elementPlus'
 
 // 寮曞叆鍏ㄥ眬鏍峰紡
 import '@/styles/index.less'
+// 暗色 / 浅色主题与字体（须在其他全局样式之后加载以覆盖变量）
+import '@/styles/theme.css'
 
 // 寮曞叆鍔ㄧ敾
 import '@/plugins/animate.css'

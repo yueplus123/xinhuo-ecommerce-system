@@ -1,0 +1,287 @@
+/*
+ * 薪火电商：浅色 / 暗色主题（暗色参考 GitHub Primer "Dark default"）
+ *
+ * 切换方式：<html> 上有 .dark 即为暗色（沿用项目已有的 store.isDark / Element Plus 暗色变量）。
+ * 取值来源：Primer dark default —— canvas #0d1117 / #161b22、border #30363d、
+ *           text #e6edf3 / #8b949e、accent #58a6ff。
+ */
+
+:root {
+  /* 字体：沿用 GitHub 的系统字体栈，中文优先苹方 / 微软雅黑 */
+  --font-body:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans SC', Helvetica, Arial, sans-serif;
+  --font-heading: var(--font-body);
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+html,
+body {
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 切换时让背景 / 文字 / 边框平滑过渡，避免突兀闪动 */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    color 0.2s ease,
+    fill 0.2s ease,
+    box-shadow 0.25s ease !important;
+}
+
+html.dark {
+  color-scheme: dark;
+
+  /* ---- GitHub Primer dark default ---- */
+  --gh-canvas: #0d1117; /* 页面底色 */
+  --gh-canvas-subtle: #161b22; /* 卡片 / 面板 */
+  --gh-canvas-inset: #010409; /* 凹陷区：侧栏 */
+  --gh-border: #30363d;
+  --gh-border-muted: #21262d;
+  --gh-fg: #e6edf3;
+  --gh-fg-muted: #8b949e;
+  --gh-accent: #58a6ff;
+  --gh-accent-emphasis: #1f6feb;
+  --gh-success: #3fb950;
+  --gh-attention: #d29922;
+  --gh-danger: #f85149;
+
+  /* ---- 覆盖 Element Plus 暗色变量，使全站组件统一成 GitHub 色调 ---- */
+  --el-bg-color: var(--gh-canvas-subtle);
+  --el-bg-color-page: var(--gh-canvas);
+  --el-bg-color-overlay: #1c2128;
+  --el-fill-color-blank: var(--gh-canvas);
+  --el-fill-color: var(--gh-border-muted);
+  --el-fill-color-light: #1c2128;
+  --el-fill-color-lighter: #161b22;
+  --el-fill-color-extra-light: #12171e;
+  --el-fill-color-dark: var(--gh-border);
+  --el-text-color-primary: var(--gh-fg);
+  --el-text-color-regular: #c9d1d9;
+  --el-text-color-secondary: var(--gh-fg-muted);
+  --el-text-color-placeholder: #6e7681;
+  --el-text-color-disabled: #484f58;
+  --el-border-color: var(--gh-border);
+  --el-border-color-light: var(--gh-border);
+  --el-border-color-lighter: var(--gh-border-muted);
+  --el-border-color-extra-light: var(--gh-border-muted);
+  --el-border-color-dark: #484f58;
+  --el-color-primary: var(--gh-accent);
+  --el-color-primary-light-3: #388bfd;
+  --el-color-primary-light-5: #1f6feb;
+  --el-color-primary-light-7: #1b3a6b;
+  --el-color-primary-light-8: #16305a;
+  --el-color-primary-light-9: #12233f;
+  --el-color-primary-dark-2: #79c0ff;
+  --el-color-success: var(--gh-success);
+  --el-color-warning: var(--gh-attention);
+  --el-color-danger: var(--gh-danger);
+  --el-mask-color: rgb(1 4 9 / 70%);
+
+  /* ---- 项目布局变量 ---- */
+  --app-content-bg-color: var(--gh-canvas);
+  --login-bg-color: var(--gh-canvas);
+  --left-menu-bg-color: var(--gh-canvas-inset);
+  --left-menu-bg-light-color: var(--gh-canvas-subtle);
+  --left-menu-text-color: var(--gh-fg-muted);
+  --left-menu-text-active-color: var(--gh-fg);
+  --logo-title-text-color: var(--gh-fg);
+  --logo-border-color: var(--gh-border-muted);
+  --top-header-bg-color: var(--gh-canvas-subtle);
+  --top-header-text-color: var(--gh-fg);
+  --top-header-hover-color: #1c2128;
+  --top-tool-border-color: var(--gh-border);
+}
+
+/* ---------- 暗色下的基础面 ---------- */
+html.dark body {
+  color: var(--gh-fg);
+  background-color: var(--gh-canvas);
+}
+
+html.dark .el-card,
+html.dark .el-dialog,
+html.dark .el-drawer,
+html.dark .el-popper.is-light,
+html.dark .el-table,
+html.dark .el-table tr,
+html.dark .el-table th.el-table__cell {
+  background-color: var(--gh-canvas-subtle);
+}
+
+html.dark .el-table th.el-table__cell {
+  color: var(--gh-fg-muted);
+  background-color: #12171e;
+}
+
+html.dark .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background-color: #12171e;
+}
+
+html.dark .el-table__body tr:hover > td.el-table__cell {
+  background-color: #1c2128 !important;
+}
+
+html.dark .el-input__wrapper,
+html.dark .el-textarea__inner,
+html.dark .el-select__wrapper {
+  background-color: var(--gh-canvas);
+  box-shadow: 0 0 0 1px var(--gh-border) inset;
+}
+
+html.dark .el-input__wrapper:hover,
+html.dark .el-select__wrapper:hover {
+  box-shadow: 0 0 0 1px #484f58 inset;
+}
+
+html.dark .el-input__wrapper.is-focus,
+html.dark .el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1px var(--gh-accent) inset;
+}
+
+html.dark .el-button:not(.el-button--primary):not(.el-button--success):not(.el-button--danger):not(.el-button--warning):not(.is-link):not(.is-text) {
+  color: var(--gh-fg);
+  background-color: #21262d;
+  border-color: var(--gh-border);
+}
+
+html.dark .el-button:not(.el-button--primary):not(.el-button--success):not(.el-button--danger):not(.el-button--warning):not(.is-link):not(.is-text):hover {
+  background-color: #30363d;
+  border-color: #484f58;
+}
+
+/* 主按钮：GitHub 的蓝色强调填充，白字 */
+html.dark .el-button--primary:not(.is-link):not(.is-text) {
+  color: #fff;
+  background-color: var(--gh-accent-emphasis);
+  border-color: rgb(240 246 252 / 10%);
+}
+
+html.dark .el-button--primary:not(.is-link):not(.is-text):hover {
+  background-color: #388bfd;
+}
+
+html.dark .el-tag {
+  border-color: transparent;
+}
+
+html.dark .el-divider {
+  border-color: var(--gh-border);
+}
+
+html.dark ::selection {
+  background: rgb(56 139 253 / 40%);
+}
+
+/* 滚动条：与 GitHub 暗色一致的细滚动条 */
+html.dark ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border: 2px solid var(--gh-canvas);
+  border-radius: 8px;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #484f58;
+}
+html.dark ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 暗色下字体略微放松：更舒适的行高、标题字重适中，避免白字在深底上显得过粗 */
+html.dark body {
+  line-height: 1.55;
+}
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark .el-card__header {
+  font-weight: 600;
+}
+
+/* ---------- 侧栏分组配色：6 组，同组同色（pict加购物车 与 fanbox账号管理 同属第 3 组） ---------- */
+:root {
+  --nav-g1-bg: #eef5ff;
+  --nav-g1-bg-active: #d0e2ff;
+  --nav-g1-fg: #3b5bdb;
+  --nav-g2-bg: #eefbf3;
+  --nav-g2-bg-active: #d3f9d8;
+  --nav-g2-fg: #2f9e44;
+  --nav-g3-bg: #fff8e8;
+  --nav-g3-bg-active: #ffe8a3;
+  --nav-g3-fg: #b98900;
+  --nav-g4-bg: #e8f7fb;
+  --nav-g4-bg-active: #c5f6fa;
+  --nav-g4-fg: #0c8599;
+  --nav-g5-bg: #f4f6f8;
+  --nav-g5-bg-active: #dee2e6;
+  --nav-g5-fg: #495057;
+  --nav-g6-bg: #f8f0fc;
+  --nav-g6-bg-active: #eebefa;
+  --nav-g6-fg: #9c36b5;
+}
+
+html.dark {
+  --nav-g1-bg: #12233f;
+  --nav-g1-bg-active: #1b3a6b;
+  --nav-g1-fg: #79c0ff;
+  --nav-g2-bg: #0f2a1a;
+  --nav-g2-bg-active: #16391f;
+  --nav-g2-fg: #56d364;
+  --nav-g3-bg: #2d2208;
+  --nav-g3-bg-active: #3d2e0a;
+  --nav-g3-fg: #e3b341;
+  --nav-g4-bg: #0b2a30;
+  --nav-g4-bg-active: #0f3a42;
+  --nav-g4-fg: #56d4dd;
+  --nav-g5-bg: #161b22;
+  --nav-g5-bg-active: #21262d;
+  --nav-g5-fg: #9198a1;
+  --nav-g6-bg: #271a3a;
+  --nav-g6-bg-active: #35224f;
+  --nav-g6-fg: #d2a8ff;
+}
+
+/* ---------- 页面通用语义色：亮色保持各页面原有取值，暗色换成 GitHub 暗色 ----------
+ * 页面样式里用 var(--ui-xxx, <原亮色值>)：未定义变量时（亮色）仍是原来的值，所以亮色外观不变。 */
+html.dark {
+  --ui-surface: var(--gh-canvas-subtle);
+  --ui-surface-2: #1c2128;
+  --ui-border: var(--gh-border);
+  --ui-border-soft: var(--gh-border-muted);
+  --ui-text: var(--gh-fg);
+  --ui-text-2: #c9d1d9;
+  --ui-muted: var(--gh-fg-muted);
+  --ui-shadow-sm: 0 0 0 1px rgb(240 246 252 / 4%);
+  --ui-shadow-md: 0 8px 24px rgb(1 4 9 / 60%);
+}
+
+/* 暗色：内容区外圈用页面底色（#0d1117），卡片用面板色（#161b22），这样卡片边界清晰；
+ * AppView 里的 dark:bg-[var(--el-bg-color)] 会把内容区也刷成面板色，在这里压回页面底色 */
+html.dark .v-layout .bg-\[var\(--app-content-bg-color\)\],
+html.dark .v-layout [class*='app-content-bg-color'] {
+  background-color: var(--gh-canvas) !important;
+}
+
+/* 物料续费等页面用到的「状态淡色底 / 同色文字」：暗色下用低饱和深底 + 明亮同色字 */
+html.dark {
+  --ui-page: var(--gh-canvas);
+  --ui-fill: #21262d;
+  --ui-warn-bg: #2d2208;
+  --ui-warn-bg2: #3d2e0a;
+  --ui-warn-fg: #e3b341;
+  --ui-danger-bg: #3a1618;
+  --ui-danger-bg2: #4a1d20;
+  --ui-danger-fg: #ff7b72;
+  --ui-ok-bg: #0f2a1a;
+}

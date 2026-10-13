@@ -3,7 +3,6 @@ import type { RouteRecordRaw } from 'vue-router'
 import type { App } from 'vue'
 import { Layout } from '@/utils/routerHelper'
 import { NO_RESET_WHITE_LIST } from '@/constants'
-import { manageRoutes } from './manage'
 
 export const constantRouterMap: AppRouteRecordRaw[] = [
   {
@@ -151,6 +150,19 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         meta: { title: 'pict加购物车', icon: 'ShoppingCart', navGroup: 3 }
       },
       {
+        // 外链菜单：点击直接在新标签页打开 fanbox 账号管理，不进入站内页面
+        path: 'fanbox-account-link',
+        component: { render: () => null },
+        name: 'FanboxAccountLink',
+        meta: {
+          title: 'fanbox账号管理',
+          icon: 'User',
+          navGroup: 3,
+          noTagsView: true,
+          externalUrl: 'https://fanbox.xinhuo.cloud/dashboard'
+        }
+      },
+      {
         path: 'platform-accounts',
         component: () => import('@/views/Xinhuo/PlatformAccountsPage.vue'),
         name: 'PlatformAccounts',
@@ -239,7 +251,7 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
       },
       {
         path: 'ledger-accounting',
-        component: () => import('@/views/Xinhuo/LedgerReactHost.vue'),
+        component: () => import('@/views/Xinhuo/LedgerPage.vue'),
         name: 'LedgerAccounting',
         meta: {
           title: '记账系统',
@@ -248,19 +260,6 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
           noCache: true,
           navGroup: 6,
           navGroupStart: true
-        }
-      },
-      {
-        // React 子路由深链（须带后缀，避免与 ledger-accounting 根路径冲突）
-        path: 'ledger-accounting/:pathMatch(.+)',
-        component: () => import('@/views/Xinhuo/LedgerReactHost.vue'),
-        name: 'LedgerAccountingDeep',
-        meta: {
-          hidden: true,
-          canTo: true,
-          requiresCeo: true,
-          activeMenu: '/ledger-accounting',
-          noCache: true
         }
       },
       {
@@ -303,13 +302,6 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         path: 'customer/shared-apple-id',
         redirect: '/shared-apple-id',
         name: 'CustomerAppleRedirect',
-        meta: { hidden: true }
-      },
-      ...manageRoutes,
-      {
-        path: 'manage/:pathMatch(.*)*',
-        redirect: '/products',
-        name: 'ManageRedirect',
         meta: { hidden: true }
       }
     ]

@@ -1,5 +1,9 @@
 <script setup lang="tsx">
 import * as echarts from 'echarts'
+import { echartsThemeName, registerEchartsThemes } from '@/utils/echartsTheme'
+import { baseAnimation, barSeriesAnimation, lineRevealAfter, lineSeriesAnimation, type AnimMode } from '@/utils/chartAnimation'
+import { OdometerNumber } from '@/components/OdometerNumber'
+import { useAppStore } from '@/store/modules/app'
 import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   ElAlert,
@@ -187,17 +191,160 @@ const staffRankData = computed(() => {
   }))
 })
 
+// 「各成员每日收款趋势」折线图的线条颜色。
+// 个别成员指定固定色；其余成员按他在列表中的位置，从下面这组「彼此差异明显」的颜色里取。
+// 调色板刻意避开黄 / 橙 / 绿，把这三类留给指定成员，防止和亮金色、绿色混淆。
+const STAFF_LINE_COLORS: Record<string, string> = {
+  李振宇: '#FFB300', // 亮金色
+  金凤: '#16A34A' // 绿色
+}
+const STAFF_LINE_PALETTE = [
+  '#2563EB', // 蓝
+  '#DC2626', // 红
+  '#7C3AED', // 紫
+  '#06B6D4', // 青
+  '#DB2777', // 玫红
+  '#92400E', // 棕
+  '#64748B', // 灰蓝
+  '#111827' // 近黑
+]
+
 const staffDailyTitle = computed(() => `${activePeriodDef().label}各成员每日收款趋势`)
+
+registerEchartsThemes()
+const appStore = useAppStore()
+const isDark = computed(() => appStore.getIsDark)
+// 每个图表创建时所用的主题；切换白天 / 黑夜后与当前主题不一致就重建
+const chartTheme = new Map<string, boolean>()
+// 递增一次 = 数字卡全部「从 0 重新滚动」（首次加载 / 切换周期）；静默刷新不递增，数字只是平滑变到新值
+const animEpoch = ref(0)
+// 记录每个图表上一次 resize 时的容器尺寸：加载过程中 handleResize 会被连续调用好几次，
+// 而 echarts 的 resize() 会打断正在播放的入场动画（柱状图因此瞬间弹出）。
+// 所以只有容器宽高真的变了才 resize，布局行为不变，动画也不会被打断。
+const chartSize = new Map<string, string>()
+
+// 下一次绘制要用的动画模式：
+//   enter  = 首次加载 / 切换周期 / 切换主题 → 播放完整入场动画（数字滚动、柱子生长、折线从左到右）
+//   update = 每 8 秒的静默刷新 → 只做短促的数值过渡，不重播入场动画
+let animMode: AnimMode = 'enter'
+// 每个图表上一次绘制时的「数据指纹」；静默刷新时数据没变就不重绘，避免无谓闪动
+const chartSig = new Map<string, string>()
+const symbolTimers = new Map<string, number>() // 折线圆点的延迟显示计时器
+
+function withAnimation(option: any, mode: AnimMode) {
+  const out = { ...option, ...baseAnimation(mode) }
+  if (Array.isArray(out.series)) {
+    let lineIdx = 0
+    out.series = out.series.map((s: any) => {
+      if (s.type === 'bar') return { ...s, ...barSeriesAnimation(mode) }
+      if (s.type === 'line') {
+        const anim = lineSeriesAnimation(mode, lineIdx++)
+        // 入场期间先藏圆点（否则圆点会比线先蹦出来），线画完后由 mountChart 再把它们亮出来
+        return mode === 'enter' && s.symbol !== 'none' ? { ...s, ...anim, showSymbol: false } : { ...s, ...anim }
+      }
+      return s
+    })
+  }
+  return out
+}
+
+// ---- 「滚到才播」：入场动画只在图表进入可视区时播放 ----
+// 折线图 / 渠道图等在页面下方，一屏看不到；如果刷新就播，用户滚下去时动画早就结束了。
+// 做法：入场时，屏幕外的图表先「静态画好」（不播动画，保证有内容），
+//       等它第一次滚进视口（可见 35%）时，再按入场参数重画一遍 → 此时才播放。
+// IntersectionObserver 默认以浏览器视口为根，页面内部容器滚动同样适用。
+const pendingEnter = new Map<string, echarts.EChartsOption>() // 还没播过入场动画的图表 → 它的 option
+let visObserver: IntersectionObserver | null = null
+
+function ensureObserver() {
+  if (visObserver || typeof IntersectionObserver === 'undefined') return
+  visObserver = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue
+        const id = (e.target as HTMLElement).id
+        const opt = pendingEnter.get(id)
+        if (!opt) continue
+        pendingEnter.delete(id)
+        visObserver?.unobserve(e.target)
+        drawChart(id, opt, 'enter') // 现在才播入场动画
+      }
+    },
+    { threshold: 0.35 }
+  )
+}
+
+const inViewport = (el: HTMLElement) => {
+  const r = el.getBoundingClientRect()
+  const vh = window.innerHeight || document.documentElement.clientHeight
+  const visible = Math.min(r.bottom, vh) - Math.max(r.top, 0)
+  return r.height > 0 && visible / r.height >= 0.35
+}
 
 function mountChart(id: string, option: echarts.EChartsOption) {
   const el = document.getElementById(id)
   if (!el) return
-  let chart = chartRefs.get(id)
-  if (!chart) {
-    chart = echarts.init(el, null, { renderer: 'canvas' })
-    chartRefs.set(id, chart)
+  if (animMode === 'enter') {
+    ensureObserver()
+    pendingEnter.delete(id)
+    visObserver?.unobserve(el)
+    if (!inViewport(el) && visObserver) {
+      // 屏幕外：先静态画好（'update' 模式 = 不播入场动画），再登记，等滚进来时重播
+      drawChart(id, option, 'static')
+      pendingEnter.set(id, option)
+      visObserver.observe(el)
+      return
+    }
+  } else {
+    // 静默刷新：若这张图还没播过入场动画，只更新它排队等待的数据，不抢先播放
+    if (pendingEnter.has(id)) pendingEnter.set(id, option)
   }
-  chart.setOption(option, { notMerge: true })
+  drawChart(id, option, animMode === 'enter' ? 'enter' : 'update')
+}
+
+type DrawMode = 'enter' | 'update' | 'static'
+
+function drawChart(id: string, option: echarts.EChartsOption, drawMode: DrawMode) {
+  const el = document.getElementById(id)
+  if (!el) return
+  const mode: AnimMode = drawMode === 'enter' ? 'enter' : 'update'
+  let chart = chartRefs.get(id)
+  if (chart && chartTheme.get(id) !== isDark.value) {
+    chart.dispose()
+    chartRefs.delete(id)
+    chartSize.delete(id)
+    chart = undefined
+  }
+  // 静默刷新且数据没变：什么都不做（既不闪也不重播）
+  const sig = JSON.stringify(option, (_k, v) => (typeof v === 'function' ? undefined : v))
+  if (chart && drawMode === 'update' && chartSig.get(id) === sig) return
+  if (!chart) {
+    chart = echarts.init(el, echartsThemeName(isDark.value), { renderer: 'canvas' })
+    chartRefs.set(id, chart)
+    chartTheme.set(id, isDark.value)
+  }
+  chartSig.set(id, sig)
+  // 静态绘制：整张图不要动画（直接出现最终样子）；入场：从头播；更新：合并并平滑变化
+  const opt = withAnimation(option, mode) as any
+  if (drawMode === 'static') opt.animation = false
+  chart.setOption(opt as echarts.EChartsOption, { notMerge: drawMode !== 'update' })
+
+  // 折线图入场结束后，把入场期间藏起来的圆点亮出来（只对原本要显示圆点的线）
+  const lines = ((option as any).series || []).filter((x: any) => x.type === 'line' && x.symbol !== 'none')
+  clearTimeout(symbolTimers.get(id))
+  if (drawMode === 'enter' && lines.length) {
+    const target = chart
+    symbolTimers.set(
+      id,
+      window.setTimeout(() => {
+        if (chartRefs.get(id) !== target) return // 期间被重建 / 销毁了
+        target.setOption(
+          { series: ((option as any).series || []).map((x: any) => (x.type === 'line' && x.symbol !== 'none' ? { showSymbol: true } : {})) },
+          { notMerge: false, lazyUpdate: false, silent: true }
+        )
+      }, lineRevealAfter(lines.length))
+    )
+  }
 }
 
 function barOption(staff: any[], field: string, color: string, isInt = false) {
@@ -378,13 +525,22 @@ function renderPeriodCharts() {
       axisLabel: { color: '#64748b' },
       splitLine: { lineStyle: { color: 'rgba(15,31,24,.08)' } }
     },
-    series: (staffDaily.series || []).map((s: any) => ({
-      name: s.name,
-      type: 'line',
-      smooth: true,
-      symbolSize: 3,
-      data: s.data || []
-    }))
+    series: (staffDaily.series || []).map((s: any, idx: number) => {
+      // 默认色 = 他在列表中第 idx 位对应的调色板颜色；被指定的成员覆盖成固定色。
+      // 调色板只有 8 种，成员超过 8 人时会循环复用。
+      const color =
+        STAFF_LINE_COLORS[String(s.name || '').trim()] ??
+        STAFF_LINE_PALETTE[idx % STAFF_LINE_PALETTE.length]
+      return {
+        name: s.name,
+        type: 'line',
+        smooth: true,
+        symbolSize: 3,
+        data: s.data || [],
+        itemStyle: { color },
+        lineStyle: { color }
+      }
+    })
   })
 }
 
@@ -420,6 +576,8 @@ async function load() {
   }
   await nextTick()
   try {
+    animMode = 'enter'
+    animEpoch.value++ // 数字卡随之重新从 0 滚动
     renderPeriodCharts()
     renderFixedCharts()
     requestAnimationFrame(() => {
@@ -439,8 +597,10 @@ async function silentRefresh() {
     const { data } = await fetchDataScreen()
     payload.value = data
     await nextTick()
+    animMode = 'update'
     renderPeriodCharts()
     renderFixedCharts()
+    animMode = 'enter' // 复位：下一次由用户操作触发的绘制仍然是入场动画
     handleResize()
   } catch {
     /* 轮询失败不打断页面 */
@@ -450,7 +610,13 @@ async function silentRefresh() {
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 function handleResize() {
-  chartRefs.forEach((c) => c.resize())
+  chartRefs.forEach((c, id) => {
+    const el = c.getDom()
+    const size = `${el.clientWidth}x${el.clientHeight}`
+    if (chartSize.get(id) === size) return
+    chartSize.set(id, size)
+    c.resize()
+  })
 }
 
 function toggleInternalImmersive() {
@@ -469,7 +635,20 @@ watch(isFullscreen, () => nextTick(() => handleResize()))
 
 watch(activePeriod, () => {
   nextTick(() => {
+    animMode = 'enter'
+    animEpoch.value++
     renderPeriodCharts()
+    handleResize()
+  })
+})
+
+// 白天 / 黑夜切换：echarts 的主题只能在创建时指定，所以主题一变就按新主题重绘全部图表
+watch(isDark, () => {
+  nextTick(() => {
+    if (!payload.value) return
+    animMode = 'enter'
+    renderPeriodCharts()
+    renderFixedCharts()
     handleResize()
   })
 })
@@ -481,13 +660,23 @@ onMounted(() => {
   pollTimer = setInterval(silentRefresh, 8000)
 })
 
+// keep-alive 下，页面第一次进入时 onMounted 和 onActivated 都会触发；
+// 第一次只由 load() 负责（含入场动画），否则 onActivated 会紧接着再画一遍，把入场动画吞掉。
+// 只有「从别的页面切回来」（再次激活）才需要补一次刷新 + 重画。
+let firstActivation = true
 onActivated(() => {
+  if (firstActivation) {
+    firstActivation = false
+    return
+  }
   if (!payload.value) {
     load()
     return
   }
   silentRefresh()
   nextTick(() => {
+    animMode = 'enter' // 切回来也让数字 / 图表重新动一遍
+    animEpoch.value++
     renderPeriodCharts()
     renderFixedCharts()
     handleResize()
@@ -505,6 +694,12 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onEscapeKey)
   chartRefs.forEach((c) => c.dispose())
   chartRefs.clear()
+  // 滚动入场的观察器与排队中的图表一并清理，避免泄漏
+  visObserver?.disconnect()
+  visObserver = null
+  pendingEnter.clear()
+  symbolTimers.forEach((t) => clearTimeout(t))
+  symbolTimers.clear()
 })
 </script>
 
@@ -557,9 +752,14 @@ onBeforeUnmount(() => {
             </div>
             <div class="kpi-tile__value">
               <span v-if="card.prefix" class="kpi-tile__prefix">{{ card.prefix }}</span>
-              <span class="kpi-tile__num">{{
-                card.precision === 2 ? fmt(card.value) : fmtInt(card.value)
-              }}</span>
+              <span class="kpi-tile__num">
+                <OdometerNumber
+                  :key="`${card.key}-${animEpoch}`"
+                  :value="card.value"
+                  :precision="card.precision === 2 ? 2 : 0"
+                  :from-zero="true"
+                />
+              </span>
             </div>
             <div class="kpi-tile__meta">
               <template v-if="hasKpiFooter(card)">
@@ -724,7 +924,9 @@ onBeforeUnmount(() => {
               <div v-for="r in staffRankData" :key="r.user__username" class="ds-rank-row">
                 <div class="ds-rank-head">
                   <span>{{ r.user__username }}</span>
-                  <span class="ds-rank-value">¥{{ fmt(r.gmv) }}</span>
+                  <span class="ds-rank-value"
+                    >¥<OdometerNumber :key="`${r.user__username}-${animEpoch}`" :value="r.gmv" :precision="2" :from-zero="true" :wait-visible="true"
+                  /></span>
                 </div>
                 <ElProgress
                   :percentage="r.percent"
@@ -767,8 +969,8 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   padding: 16px 20px;
   border-radius: 12px;
-  background: #fff;
-  border: 1px solid #eef2f7;
+  background: var(--ui-surface, #fff);
+  border: 1px solid var(--ui-border-soft, #eef2f7);
 }
 
 .ds-toolbar__info {
@@ -779,13 +981,13 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 18px;
   font-weight: 700;
-  color: #303133;
+  color: var(--ui-text, #303133);
 }
 
 .ds-sub {
   margin: 4px 0 0;
   font-size: 12px;
-  color: #909399;
+  color: var(--ui-muted, #909399);
 }
 
 .ds-toolbar-actions {
@@ -813,12 +1015,12 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 16px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--ui-text, #1f2937);
 }
 
 .ds-section__hint {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--ui-muted, #9ca3af);
 }
 
 /* KPI grids (legacy charts sections may still reference) */
@@ -869,10 +1071,10 @@ onBeforeUnmount(() => {
   gap: 4px;
   min-height: 0;
   padding: 10px 12px 8px;
-  background: #fff;
-  border: 1px solid #e8ecf1;
+  background: var(--ui-surface, #fff);
+  border: 1px solid var(--ui-border, #e8ecf1);
   border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  box-shadow: var(--ui-shadow-sm, 0 1px 2px rgba(16, 24, 40, 0.04));
   overflow: hidden;
   transition:
     border-color 0.15s ease,
@@ -892,7 +1094,7 @@ onBeforeUnmount(() => {
 
 .kpi-tile:hover {
   border-color: #d5dde8;
-  box-shadow: 0 3px 10px rgba(16, 24, 40, 0.07);
+  box-shadow: var(--ui-shadow-md, 0 3px 10px rgba(16, 24, 40, 0.07));
   transform: translateY(-1px);
 }
 
@@ -945,7 +1147,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
-  color: #4b5563;
+  color: var(--ui-text-2, #4b5563);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -957,14 +1159,14 @@ onBeforeUnmount(() => {
   gap: 2px;
   min-width: 0;
   padding-left: 1px;
-  color: #111827;
+  color: var(--ui-text, #111827);
   line-height: 1.1;
 }
 
 .kpi-tile__prefix {
   font-size: 12px;
   font-weight: 650;
-  color: #374151;
+  color: var(--ui-text-2, #374151);
 }
 
 .kpi-tile__num {
@@ -990,7 +1192,7 @@ onBeforeUnmount(() => {
 }
 
 .kpi-tile__meta-label {
-  color: #9ca3af;
+  color: var(--ui-muted, #9ca3af);
 }
 
 .kpi-tile__meta-spacer {
@@ -1012,7 +1214,7 @@ onBeforeUnmount(() => {
 }
 
 .kpi-tile__delta.is-flat {
-  color: #6b7280;
+  color: var(--ui-muted, #6b7280);
 }
 
 @media (max-width: 1399px) {
@@ -1046,9 +1248,9 @@ onBeforeUnmount(() => {
 /* Panel cards */
 .ds-panel {
   height: 100%;
-  border: 1px solid #eef2f7;
+  border: 1px solid var(--ui-border-soft, #eef2f7);
   border-radius: 12px;
-  background: #fff;
+  background: var(--ui-surface, #fff);
   box-shadow: none;
 }
 
@@ -1067,7 +1269,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: var(--ui-text, #303133);
 }
 
 .ds-panel--rank :deep(.el-card__body) {
@@ -1129,7 +1331,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   margin-bottom: 6px;
   font-size: 13px;
-  color: #606266;
+  color: var(--ui-text-2, #606266);
 }
 
 .ds-rank-value {
@@ -1140,6 +1342,6 @@ onBeforeUnmount(() => {
 .ds-empty {
   padding: 24px 0;
   text-align: center;
-  color: #909399;
+  color: var(--ui-muted, #909399);
 }
 </style>

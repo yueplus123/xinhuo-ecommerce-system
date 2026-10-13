@@ -53,6 +53,8 @@ interface RouteMetaCustom extends Record<string | number | symbol, unknown> {
   navGroup?: 1 | 2 | 3 | 4 | 5 | 6
   /** 分组首项，上方留出分隔空隙 */
   navGroupStart?: boolean
+  /** 外链菜单：点击后在新标签页打开该网址，不进入站内路由 */
+  externalUrl?: string
 }
 
 declare module 'vue-router' {

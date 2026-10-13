@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import admin_catalog_views, ledger_views, manage_accounts, manage_catalog, manage_content, manage_pools, views
+from . import admin_catalog_views, ledger_views, manage_accounts, manage_catalog, manage_content, manage_pools, manage_sku, views
 
 app_name = "api"
 
@@ -133,4 +133,5 @@ urlpatterns = [
     *manage_pools.urlpatterns,
     *manage_content.urlpatterns,
     *manage_accounts.urlpatterns,
+    *manage_sku.urlpatterns,
 ]

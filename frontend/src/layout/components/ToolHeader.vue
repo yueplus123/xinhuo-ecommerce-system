@@ -4,6 +4,7 @@ import { Collapse } from '@/components/Collapse'
 import { LocaleDropdown } from '@/components/LocaleDropdown'
 import { SizeDropdown } from '@/components/SizeDropdown'
 import { UserInfo } from '@/components/UserInfo'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { Screenfull } from '@/components/Screenfull'
 import { Breadcrumb } from '@/components/Breadcrumb'
 import { useAppStore } from '@/store/modules/app'
@@ -63,6 +64,7 @@ export default defineComponent({
                 color="var(--top-header-text-color)"
               ></LocaleDropdown>
             ) : undefined}
+            <ThemeToggle color="var(--top-header-text-color)"></ThemeToggle>
             <UserInfo></UserInfo>
           </div>
         </div>

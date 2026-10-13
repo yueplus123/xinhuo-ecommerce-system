@@ -26,6 +26,7 @@ import {
   wechatBotTableColumns,
   type WechatBotColumnLayout
 } from './wechatBotTables'
+import { formatDateTimeSeconds } from '@/utils/format'
 
 const props = defineProps<{
   tableType: string
@@ -75,9 +76,7 @@ const editForm = reactive({
 })
 
 function resetCreateForm() {
-  const now = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  createForm.occurred_at = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+  createForm.occurred_at = formatDateTimeSeconds(new Date().toISOString()) // 北京时间，与后端按服务器时区解析一致
   createForm.quantity = 1
   createForm.business_name = ''
   createForm.employee_name = ''

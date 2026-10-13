@@ -129,6 +129,15 @@ router.beforeEach(async (to, _from, next) => {
       return
     }
 
+    // 外链菜单的占位路由：不进入站内页面，直接在新标签页打开外链
+    if (to.meta?.externalUrl) {
+      window.open(String(to.meta.externalUrl), '_blank', 'noopener,noreferrer')
+      // 有来源页就留在原地；直接打开该地址（没有来源页）则回到数据大屏
+      if (_from.name) next(false)
+      else next('/data-screen')
+      return
+    }
+
     if (to.meta?.requiresCeo && !auth.isCeo) {
       next('/data-screen')
       return

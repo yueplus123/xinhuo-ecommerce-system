@@ -29,6 +29,7 @@ import {
   deleteMaterialRenewal
 } from '@/api/xinhuo/materialRenewals'
 import { formatRequestError, formatDateTime } from '@/utils/format'
+import { daysFromToday, isoToDateOnly, parseYmd, todayYmd } from '@/utils/ymd'
 
 defineOptions({ name: 'MaterialRenewal' })
 
@@ -69,53 +70,19 @@ const cycleOptions = [
 
 const ACCENT = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899']
 
-function pad2(n: number) {
-  return String(n).padStart(2, '0')
-}
-
-function nowDateValue() {
-  const d = new Date()
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
-}
-
-function isoToDateOnly(iso: string) {
-  if (!iso) return ''
-  const m = String(iso).match(/^(\d{4}-\d{2}-\d{2})/)
-  return m ? m[1] : ''
-}
-
-function parseLocalYmd(s: string) {
-  const ymd = isoToDateOnly(s)
-  if (!ymd) return null
-  const p = ymd.split('-').map(Number)
-  if (p.length !== 3 || p.some((n) => Number.isNaN(n))) return null
-  return new Date(p[0], p[1] - 1, p[2])
-}
-
-function daysUntil(ymdOrIso: string) {
-  const d = parseLocalYmd(ymdOrIso)
-  if (!d || Number.isNaN(d.getTime())) return null
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const t0 = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  return Math.round((t0.getTime() - today.getTime()) / 86400000)
-}
-
 function formatDueShort(ymdOrIso: string) {
-  const d = parseLocalYmd(ymdOrIso)
-  if (!d) return '—'
-  return `${d.getMonth() + 1}月${d.getDate()}日`
+  const p = parseYmd(ymdOrIso)
+  return p ? `${p[1]}月${p[2]}日` : '—'
 }
 
 function formatDueFull(ymdOrIso: string) {
-  const d = parseLocalYmd(ymdOrIso)
-  if (!d) return '—'
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+  const p = parseYmd(ymdOrIso)
+  return p ? `${p[0]}年${p[1]}月${p[2]}日` : '—'
 }
 
 function statusBadge(r: any) {
   if (!r?.is_active) return { text: '已停用', tone: 'off' as const }
-  const diff = daysUntil(r.next_due_at)
+  const diff = daysFromToday(r.next_due_at)
   if (diff == null) return { text: '周期续费', tone: 'ok' as const }
   if (diff < 0) return { text: '已逾期', tone: 'urgent' as const }
   if (diff === 0) return { text: '今日到期', tone: 'soon' as const }
@@ -146,7 +113,7 @@ function cycleDaysOf(r: any) {
 }
 
 function countdownText(r: any) {
-  const diff = daysUntil(r?.next_due_at)
+  const diff = daysFromToday(r?.next_due_at)
   if (diff == null) return '—'
   if (diff < 0) return `已逾期 ${Math.abs(diff)} 天`
   if (diff === 0) return '今日到期'
@@ -155,7 +122,7 @@ function countdownText(r: any) {
 }
 
 function dueProgress(r: any) {
-  const diff = daysUntil(r?.next_due_at)
+  const diff = daysFromToday(r?.next_due_at)
   const total = cycleDaysOf(r)
   if (diff == null || total < 1) return 0
   if (diff < 0) return 100
@@ -165,7 +132,7 @@ function dueProgress(r: any) {
 
 function cardTone(r: any): 'urgent' | 'soon' | 'ok' | 'off' {
   if (!r?.is_active) return 'off'
-  const diff = daysUntil(r.next_due_at)
+  const diff = daysFromToday(r.next_due_at)
   if (diff == null) return 'ok'
   if (diff < 0) return 'urgent'
   if (diff <= 7) return 'soon'
@@ -237,7 +204,7 @@ function payloadFrom(form: ReturnType<typeof emptyForm>) {
 
 function openCreate() {
   createForm.value = emptyForm()
-  createForm.value.next_due_at = nowDateValue()
+  createForm.value.next_due_at = todayYmd()
   createOpen.value = true
 }
 
@@ -695,7 +662,7 @@ onMounted(loadRows)
 
 <style scoped>
 .mr-page :deep(.el-card__body) {
-  background: #f4f5f7;
+  background: var(--ui-page, #f4f5f7);
 }
 
 .mr-toolbar {
@@ -723,7 +690,7 @@ onMounted(loadRows)
   left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: #9ca3af;
+  color: var(--ui-muted, #9ca3af);
   font-size: 16px;
   pointer-events: none;
 }
@@ -732,9 +699,9 @@ onMounted(loadRows)
   width: 100%;
   height: 40px;
   padding: 0 14px 0 38px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--ui-border, #e5e7eb);
   border-radius: 999px;
-  background: #fff;
+  background: var(--ui-surface, #fff);
   font-size: 14px;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -750,7 +717,7 @@ onMounted(loadRows)
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: #9ca3af;
+  color: var(--ui-muted, #9ca3af);
   text-transform: uppercase;
 }
 
@@ -767,16 +734,16 @@ onMounted(loadRows)
   gap: 6px;
   min-height: 168px;
   padding: 16px 16px 14px;
-  background: #fff;
-  border: 1px solid #e8eaed;
+  background: var(--ui-surface, #fff);
+  border: 1px solid var(--ui-border, #e8eaed);
   border-radius: 14px;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  box-shadow: var(--ui-shadow-sm, 0 1px 2px rgba(16, 24, 40, 0.04));
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .mr-card:hover {
-  box-shadow: 0 6px 18px rgba(16, 24, 40, 0.08);
+  box-shadow: var(--ui-shadow-md, 0 6px 18px rgba(16, 24, 40, 0.08));
   transform: translateY(-1px);
 }
 
@@ -823,20 +790,20 @@ onMounted(loadRows)
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #9ca3af;
+  color: var(--ui-muted, #9ca3af);
   cursor: pointer;
 }
 
 .mr-card__more:hover {
-  background: #f3f4f6;
-  color: #4b5563;
+  background: var(--ui-fill, #f3f4f6);
+  color: var(--ui-text-2, #4b5563);
 }
 
 .mr-card__name {
   margin: 0;
   font-size: 16px;
   font-weight: 700;
-  color: #111827;
+  color: var(--ui-text, #111827);
   line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
@@ -847,28 +814,28 @@ onMounted(loadRows)
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #111827;
+  color: var(--ui-text, #111827);
   font-variant-numeric: tabular-nums;
 }
 
 .mr-card__cat {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--ui-muted, #9ca3af);
 }
 
 .mr-card__due {
   margin-top: auto;
   padding: 10px 10px 8px;
   border-radius: 10px;
-  background: #f3f4f6;
+  background: var(--ui-fill, #f3f4f6);
 }
 
 .mr-card__due.is-soon {
-  background: #fff7ed;
+  background: var(--ui-warn-bg, #fff7ed);
 }
 
 .mr-card__due.is-urgent {
-  background: #fef2f2;
+  background: var(--ui-danger-bg, #fef2f2);
 }
 
 .mr-card__due-row {
@@ -882,22 +849,22 @@ onMounted(loadRows)
   font-size: 15px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  color: #111827;
+  color: var(--ui-text, #111827);
 }
 
 .mr-card__due.is-soon .mr-card__countdown {
-  color: #c2410c;
+  color: var(--ui-warn-fg, #c2410c);
 }
 
 .mr-card__due.is-urgent .mr-card__countdown {
-  color: #dc2626;
+  color: var(--ui-danger-fg, #dc2626);
 }
 
 .mr-card__due-date {
   flex-shrink: 0;
   font-size: 12px;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--ui-muted, #6b7280);
 }
 
 .mr-card__bar {
@@ -932,7 +899,7 @@ onMounted(loadRows)
   margin-top: 8px;
   padding-top: 0;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--ui-muted, #6b7280);
 }
 
 .mr-card__meta-item {
@@ -945,15 +912,15 @@ onMounted(loadRows)
   margin: 12px 0 16px;
   padding: 12px;
   border-radius: 12px;
-  background: #f3f4f6;
+  background: var(--ui-fill, #f3f4f6);
 }
 
 .mr-detail__due.is-soon {
-  background: #fff7ed;
+  background: var(--ui-warn-bg, #fff7ed);
 }
 
 .mr-detail__due.is-urgent {
-  background: #fef2f2;
+  background: var(--ui-danger-bg, #fef2f2);
 }
 
 .mr-detail__due-row {
@@ -962,21 +929,21 @@ onMounted(loadRows)
   justify-content: space-between;
   gap: 8px;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--ui-muted, #6b7280);
 }
 
 .mr-detail__countdown {
   font-size: 18px;
   font-weight: 800;
-  color: #111827;
+  color: var(--ui-text, #111827);
 }
 
 .mr-detail__due.is-soon .mr-detail__countdown {
-  color: #c2410c;
+  color: var(--ui-warn-fg, #c2410c);
 }
 
 .mr-detail__due.is-urgent .mr-detail__countdown {
-  color: #dc2626;
+  color: var(--ui-danger-fg, #dc2626);
 }
 
 .mr-detail__head {
@@ -1014,7 +981,7 @@ onMounted(loadRows)
   margin: 0;
   font-size: 20px;
   font-weight: 700;
-  color: #111827;
+  color: var(--ui-text, #111827);
   line-height: 1.25;
 }
 
@@ -1026,23 +993,23 @@ onMounted(loadRows)
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--ui-danger-bg2, #fee2e2);
+  color: var(--ui-danger-fg, #b91c1c);
 }
 
 .mr-detail__badge.is-soon {
-  background: #ffedd5;
-  color: #c2410c;
+  background: var(--ui-warn-bg2, #ffedd5);
+  color: var(--ui-warn-fg, #c2410c);
 }
 
 .mr-detail__badge.is-ok {
-  background: #ecfdf5;
+  background: var(--ui-ok-bg, #ecfdf5);
   color: #047857;
 }
 
 .mr-detail__badge.is-off {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--ui-fill, #f3f4f6);
+  color: var(--ui-muted, #6b7280);
 }
 
 .mr-detail__price-row {
@@ -1056,14 +1023,14 @@ onMounted(loadRows)
   font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.03em;
-  color: #111827;
+  color: var(--ui-text, #111827);
   font-variant-numeric: tabular-nums;
 }
 
 .mr-detail__cycle {
   margin-top: 2px;
   font-size: 14px;
-  color: #9ca3af;
+  color: var(--ui-muted, #9ca3af);
 }
 
 .mr-detail__cal {
@@ -1074,13 +1041,13 @@ onMounted(loadRows)
   height: 40px;
   border: 1px solid #fecaca;
   border-radius: 10px;
-  background: #fff;
+  background: var(--ui-surface, #fff);
   color: #ef4444;
   cursor: pointer;
 }
 
 .mr-detail__cal:hover {
-  background: #fef2f2;
+  background: var(--ui-danger-bg, #fef2f2);
 }
 
 .mr-detail__accent {
@@ -1101,7 +1068,7 @@ onMounted(loadRows)
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: #9ca3af;
+  color: var(--ui-muted, #9ca3af);
   text-transform: uppercase;
 }
 
@@ -1119,8 +1086,8 @@ onMounted(loadRows)
   margin-top: 18px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: #f3f4f6;
-  color: #4b5563;
+  background: var(--ui-fill, #f3f4f6);
+  color: var(--ui-text-2, #4b5563);
   font-size: 13px;
   line-height: 1.45;
 }
