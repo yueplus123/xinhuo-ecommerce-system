@@ -129,7 +129,10 @@ function isValidOrderDate(row: any) {
   const m = parseInt(String(row.order_month ?? ''), 10)
   const d = parseInt(String(row.order_day ?? ''), 10)
   if (!m || m < 1 || m > 12 || !d || d < 1 || d > 31) return false
-  const year = parseInt(beijingNowParts().year, 10)
+  // 与后端一致：所选月份晚于当前月份视为去年
+  const now = beijingNowParts()
+  const curYear = parseInt(now.year, 10)
+  const year = m > parseInt(now.month, 10) ? curYear - 1 : curYear
   const test = new Date(year, m - 1, d)
   return test.getFullYear() === year && test.getMonth() === m - 1 && test.getDate() === d
 }

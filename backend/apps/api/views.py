@@ -521,7 +521,8 @@ class PlatformDetailAPIView(generics.RetrieveAPIView):
 def _payment_order_datetime(month_day: str):
     """
     解析批量录入的订单日期（MM-DD）。
-    年份与时分秒取提交当下的本地时间。
+    时分秒取提交当下的本地时间；年份取当年，
+    但所选月份晚于当前月份时视为去年（如 1 月补录 12 月的单）。
     """
     now = timezone.localtime(timezone.now())
     raw = (month_day or "").strip()
@@ -530,7 +531,8 @@ def _payment_order_datetime(month_day: str):
     try:
         month_s, day_s = raw.split("-", 1)
         month, day = int(month_s), int(day_s)
-        return now.replace(month=month, day=day, microsecond=0)
+        year = now.year - 1 if month > now.month else now.year
+        return now.replace(year=year, month=month, day=day, microsecond=0)
     except (ValueError, TypeError, OverflowError):
         return now.replace(microsecond=0)
 
