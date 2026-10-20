@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import admin_catalog_views, ledger_views, manage_accounts, manage_catalog, manage_content, manage_pools, manage_sku, views
+from . import admin_catalog_views, catalog_library, ledger_views, manage_accounts, manage_catalog, manage_content, manage_pools, manage_sku, views
 
 app_name = "api"
 
@@ -59,6 +59,7 @@ urlpatterns = [
         name="platform-export-businesses",
     ),
     path("platforms/<int:pk>/", views.PlatformDetailAPIView.as_view(), name="platform_detail"),
+    path("catalog/library/", catalog_library.CatalogLibraryAPIView.as_view(), name="catalog-library"),
     path("admin/catalog/platforms/", admin_catalog_views.AdminPlatformListCreateAPIView.as_view(), name="admin-catalog-platforms"),
     path("admin/catalog/platforms/reorder/", admin_catalog_views.AdminPlatformReorderAPIView.as_view(), name="admin-catalog-platforms-reorder"),
     path("admin/catalog/platforms/<int:pk>/", admin_catalog_views.AdminPlatformWorkbenchAPIView.as_view(), name="admin-catalog-platform"),

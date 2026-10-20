@@ -87,6 +87,20 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         meta: { title: '平台/商品', icon: 'Goods', guestAllowed: true, navGroup: 1 }
       },
       {
+        // 外链菜单：员工商品库（淘宝样式，静态页 public/library.html，数据来自 /api/catalog/library/）
+        path: 'catalog-library-link',
+        component: { render: () => null },
+        name: 'CatalogLibraryLink',
+        meta: {
+          title: '员工商品库',
+          icon: 'Shop',
+          guestAllowed: true,
+          navGroup: 1,
+          noTagsView: true,
+          externalUrl: '/library.html'
+        }
+      },
+      {
         path: 'products/:platformId',
         component: () => import('@/views/Xinhuo/products/BusinessListPage.vue'),
         name: 'PlatformBusinesses',
