@@ -4,9 +4,10 @@
 def get_client_ip(request) -> str:
     if not request:
         return ""
+    # 反代（nginx）会把真实客户端 IP 追加在 X-Forwarded-For 末尾；首段可被客户端伪造，故取末段
     xff = request.META.get("HTTP_X_FORWARDED_FOR")
     if xff:
-        return xff.split(",")[0].strip()[:64]
+        return xff.split(",")[-1].strip()[:64]
     return (request.META.get("REMOTE_ADDR") or "").strip()[:64]
 
 

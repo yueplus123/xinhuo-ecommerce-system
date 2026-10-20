@@ -1,3 +1,5 @@
+from hmac import compare_digest
+
 from django.conf import settings
 
 
@@ -19,4 +21,4 @@ def api_key_ok(request) -> bool:
         auth = (request.headers.get("Authorization") or "").strip()
         if auth.lower().startswith("bearer "):
             got = auth[7:].strip()
-    return bool(got) and got == expected
+    return bool(got) and compare_digest(got.encode(), expected.encode())

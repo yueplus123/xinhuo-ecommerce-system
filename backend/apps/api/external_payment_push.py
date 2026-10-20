@@ -45,6 +45,8 @@ def _parse_amount(raw) -> Decimal:
         d = Decimal(str(raw).strip())
     except (InvalidOperation, AttributeError, TypeError):
         raise ValueError("amount 无效，需为数字字符串，单位：元，最多两位小数")
+    if not d.is_finite() or abs(d) >= Decimal("1e12"):
+        raise ValueError("amount 无效：需为有限数值且不超过 1e12")
     if d.copy_abs().as_tuple().exponent < -2:
         raise ValueError("amount 最多两位小数")
     return d.quantize(Decimal("0.01"))

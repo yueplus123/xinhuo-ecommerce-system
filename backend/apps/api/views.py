@@ -1,3 +1,4 @@
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from datetime import datetime, timedelta
 
 from django.contrib.auth import get_user_model
@@ -9,10 +10,12 @@ from rest_framework import generics, permissions, status, viewsets
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from .upload_utils import sniff_image_ext
 from .api_key import api_key_ok, configured_api_key
 from backend.apps.catalog.payment_records import (
     filtered_payment_records_api_qs,
@@ -307,7 +310,6 @@ class CommonAccountViewSet(viewsets.ModelViewSet):
             qs = qs.filter(
                 Q(platform__icontains=q)
                 | Q(account__icontains=q)
-                | Q(password__icontains=q)
                 | Q(remark__icontains=q)
             )
         return qs.order_by("-updated_at", "id")
@@ -315,11 +317,15 @@ class CommonAccountViewSet(viewsets.ModelViewSet):
 
 class ApiTokenObtainPairView(TokenObtainPairView):
     permission_classes = [AllowAny]
+    throttle_scope = "auth"
+    throttle_classes = [ScopedRateThrottle]
     serializer_class = StaffTokenObtainPairSerializer
 
 
 class ApiTokenRefreshView(TokenRefreshView):
     permission_classes = [AllowAny]
+    throttle_scope = "auth"
+    throttle_classes = [ScopedRateThrottle]
     serializer_class = StaffTokenRefreshSerializer
 
 
@@ -352,11 +358,13 @@ class MeAvatarAPIView(APIView):
         meta, _ = StaffLoginMeta.objects.get_or_create(user_id=request.user.pk)
         uploaded = request.FILES.get("avatar") or request.FILES.get("file")
         if uploaded:
-            if uploaded.size > 2 * 1024 * 1024:
-                return Response({"detail": "头像不能超过 2MB"}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                ext = sniff_image_ext(uploaded, max_bytes=2 * 1024 * 1024)
+            except ValueError as e:
+                return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
             if meta.avatar:
                 meta.avatar.delete(save=False)
-            meta.avatar.save(uploaded.name, uploaded, save=True)
+            meta.avatar.save(f"{uuid.uuid4().hex}.{ext}", uploaded, save=True)
         else:
             raw = request.data.get("avatar") or request.data.get("image") or ""
             if not isinstance(raw, str) or not raw.startswith("data:image"):
@@ -366,19 +374,17 @@ class MeAvatarAPIView(APIView):
                 )
             try:
                 header, b64 = raw.split(",", 1)
-                ext = "png"
-                if "jpeg" in header or "jpg" in header:
-                    ext = "jpg"
-                elif "webp" in header:
-                    ext = "webp"
                 data = base64.b64decode(b64)
             except Exception:
                 return Response({"detail": "图片数据无效"}, status=status.HTTP_400_BAD_REQUEST)
-            if len(data) > 2 * 1024 * 1024:
-                return Response({"detail": "头像不能超过 2MB"}, status=status.HTTP_400_BAD_REQUEST)
+            content = ContentFile(data)
+            try:
+                ext = sniff_image_ext(content, max_bytes=2 * 1024 * 1024)
+            except ValueError as e:
+                return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
             if meta.avatar:
                 meta.avatar.delete(save=False)
-            meta.avatar.save(f"{uuid.uuid4().hex}.{ext}", ContentFile(data), save=True)
+            meta.avatar.save(f"{uuid.uuid4().hex}.{ext}", content, save=True)
 
         u = get_user_model().objects.select_related("staff_login_meta").get(pk=request.user.pk)
         return Response(UserSerializer(u, context={"request": request}).data)
@@ -406,6 +412,26 @@ class MeLoginLogsAPIView(APIView):
         return Response(StaffLoginLogSerializer(logs, many=True).data)
 
 
+def _filter_platforms(qs, request):
+    """平台列表 / 导出共用的关键词 + 状态筛选。"""
+    q = (request.GET.get("q") or "").strip()
+    status_val = (request.GET.get("status") or "").strip()
+    if status_val:
+        qs = qs.filter(status=status_val)
+    if q:
+        qs = qs.filter(
+            Q(name__icontains=q)
+            | Q(url__icontains=q)
+            | Q(platform_tags__name__icontains=q)
+            | Q(businesses__name__icontains=q)
+            | Q(businesses__skus__name__icontains=q)
+            | Q(businesses__skus__note__icontains=q)
+            | Q(businesses__skus__tutorial_text__icontains=q)
+            | Q(businesses__skus__quick_phrases__content__icontains=q)
+        ).distinct()
+    return qs.order_by("sort_order", "id")
+
+
 class PlatformListAPIView(generics.ListAPIView):
     permission_classes = [StaffOnlyPermission]
     guest_allowed = True
@@ -431,43 +457,7 @@ class PlatformListAPIView(generics.ListAPIView):
                 distinct=True,
             ),
         )
-        q = (self.request.GET.get("q") or "").strip()
-        status_val = (self.request.GET.get("status") or "").strip()
-        if status_val:
-            qs = qs.filter(status=status_val)
-        if q:
-            qs = qs.filter(
-                Q(name__icontains=q)
-                | Q(url__icontains=q)
-                | Q(platform_tags__name__icontains=q)
-                | Q(businesses__name__icontains=q)
-                | Q(businesses__skus__name__icontains=q)
-                | Q(businesses__skus__note__icontains=q)
-                | Q(businesses__skus__tutorial_text__icontains=q)
-                | Q(businesses__skus__quick_phrases__content__icontains=q)
-            ).distinct()
-        return qs.order_by("sort_order", "id")
-
-
-def _platforms_filtered_queryset(request):
-    """与平台列表相同的关键词 / 状态筛选。"""
-    qs = Platform.objects.all()
-    q = (request.GET.get("q") or "").strip()
-    status_val = (request.GET.get("status") or "").strip()
-    if status_val:
-        qs = qs.filter(status=status_val)
-    if q:
-        qs = qs.filter(
-            Q(name__icontains=q)
-            | Q(url__icontains=q)
-            | Q(platform_tags__name__icontains=q)
-            | Q(businesses__name__icontains=q)
-            | Q(businesses__skus__name__icontains=q)
-            | Q(businesses__skus__note__icontains=q)
-            | Q(businesses__skus__tutorial_text__icontains=q)
-            | Q(businesses__skus__quick_phrases__content__icontains=q)
-        ).distinct()
-    return qs.order_by("sort_order", "id")
+        return _filter_platforms(qs, self.request)
 
 
 class PlatformBusinessExportAPIView(APIView):
@@ -482,7 +472,7 @@ class PlatformBusinessExportAPIView(APIView):
 
         # 仅在售业务；禁售 / 待测试（测试）一律不导出
         on_sale_businesses = Business.objects.filter(status=Business.STATUS_ON_SALE).order_by("id")
-        platforms = _platforms_filtered_queryset(request).prefetch_related(
+        platforms = _filter_platforms(Platform.objects.all(), request).prefetch_related(
             Prefetch("businesses", queryset=on_sale_businesses)
         )
         lines = []
@@ -586,11 +576,13 @@ class PaymentBatchSubmitAPIView(APIView):
                 order_count = 0
             amount_raw = request.POST.get(f"amount_{idx}", "0") or "0"
             try:
-                amount_val = float(amount_raw)
-            except (TypeError, ValueError):
-                amount_val = 0.0
+                amount_val = Decimal(str(amount_raw).strip()).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                if not amount_val.is_finite() or abs(amount_val) >= Decimal("1e12"):
+                    raise ValueError
+            except (InvalidOperation, ValueError):
+                amount_val = Decimal("0")
             note = request.POST.get(f"note_{idx}", "")[:500]
-            if order_count <= 0 and amount_val <= 0:
+            if channel not in {c[0] for c in PAYMENT_CHANNELS} or (order_count <= 0 and amount_val <= 0):
                 continue
             order_md = request.POST.get(f"order_md_{idx}", "")
             order_at = _payment_order_datetime(order_md)
@@ -629,24 +621,26 @@ class PaymentMetaAPIView(APIView):
         return Response({"channels": PAYMENT_CHANNELS})
 
 
-class ExternalPaymentPushAPIView(APIView):
-    """外部系统实时推送收款：API Key 鉴权，event_id 幂等。"""
+class _ExternalPushAPIView(APIView):
+    """外部系统推送公共基类：API Key 鉴权，event_id 幂等；子类只需指定 service 名与入库函数。"""
 
     authentication_classes = []
     permission_classes = [AllowAny]
+    service = ""
+
+    def ingest(self, data):
+        raise NotImplementedError
 
     def get(self, request):
         if not api_key_ok(request):
             return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
-        return Response({"ok": True, "service": "external-payment-push"})
+        return Response({"ok": True, "service": self.service})
 
     def post(self, request):
-        from .external_payment_push import ingest_push_payload
-
         if not api_key_ok(request):
             return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
         try:
-            result = ingest_push_payload(request.data)
+            result = self.ingest(request.data)
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         # 单条新建用 201；重复或批量统一 200
@@ -655,65 +649,77 @@ class ExternalPaymentPushAPIView(APIView):
         return Response(result, status=status.HTTP_200_OK)
 
 
+class ExternalPaymentPushAPIView(_ExternalPushAPIView):
+    """外部系统实时推送收款。"""
+
+    service = "external-payment-push"
+
+    def ingest(self, data):
+        from .external_payment_push import ingest_push_payload
+
+        return ingest_push_payload(data)
+
+
+class ExternalWechatBotPushAPIView(_ExternalPushAPIView):
+    """微信机器人推送 → 微信BOT三表。"""
+
+    service = "external-wechat-bot-push"
+
+    def ingest(self, data):
+        from .wechat_bot_push import ingest_wechat_bot_payload
+
+        return ingest_wechat_bot_payload(data)
+
+
+class ExternalLedgerPushAPIView(_ExternalPushAPIView):
+    """微信机器人推送 → 记账表 LedgerRecord。"""
+
+    service = "external-ledger-push"
+
+    def ingest(self, data):
+        from .ledger_push import ingest_ledger_push_payload
+
+        return ingest_ledger_push_payload(data)
+
+
 class ExternalBotProductQueryAPIView(APIView):
-    """微信机器人查商品：API Key 鉴权；仅返回平台名 + 商品名。"""
+    """微信机器人查商品：API Key 鉴权；仅返回平台名 + 商品名。GET 用查询串，POST 用 body：{"q":"关键词"}。"""
 
     authentication_classes = []
     permission_classes = [AllowAny]
 
-    def get(self, request):
-        from .bot_product_query import format_bot_product_reply, query_bot_products
-
-        if not api_key_ok(request):
-            return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
-
-        q = (request.GET.get("q") or request.GET.get("keyword") or "").strip()
-        platform = (request.GET.get("platform") or "").strip()
-        # 勿用 format=：DRF 会当成内容协商导致 404
-        fmt = (request.GET.get("as") or request.GET.get("reply") or "").strip().lower()
-        on_sale = (request.GET.get("on_sale") or "1").strip() not in {"0", "false", "no"}
-        try:
-            limit = int(request.GET.get("limit") or 50)
-        except (TypeError, ValueError):
-            return Response({"detail": "limit 无效"}, status=status.HTTP_400_BAD_REQUEST)
-
-        data = query_bot_products(q=q, platform=platform, limit=limit, on_sale_only=on_sale)
-        if fmt in {"text", "plain", "reply", "1", "true"}:
-            return Response(
-                {"ok": True, "text": format_bot_product_reply(data), "count": data["count"]}
-            )
-        return Response(data)
-
-    def post(self, request):
-        """兼容 BOT 用 POST body：{"q":"关键词"}。"""
+    def _query(self, request):
         from .bot_product_query import format_bot_product_reply, query_bot_products
 
         if not api_key_ok(request):
             return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
 
         body = request.data if isinstance(request.data, dict) else {}
-        q = str(body.get("q") or body.get("keyword") or request.GET.get("q") or "").strip()
-        platform = str(body.get("platform") or request.GET.get("platform") or "").strip()
-        fmt = str(
-            body.get("as")
-            or body.get("reply")
-            or request.GET.get("as")
-            or request.GET.get("reply")
-            or ""
-        ).strip().lower()
-        on_sale_raw = body.get("on_sale", request.GET.get("on_sale", "1"))
-        on_sale = str(on_sale_raw).strip().lower() not in {"0", "false", "no"}
+
+        def pick(*names, default=""):
+            # body 优先，其次查询串（勿用 format=：DRF 会当成内容协商导致 404）
+            for name in names:
+                for src in (body, request.GET):
+                    v = src.get(name)
+                    if v not in (None, ""):
+                        return str(v).strip()
+            return default
+
+        q = pick("q", "keyword")
+        platform = pick("platform")
+        fmt = pick("as", "reply").lower()
+        on_sale = pick("on_sale", default="1").lower() not in {"0", "false", "no"}
         try:
-            limit = int(body.get("limit") or request.GET.get("limit") or 50)
+            limit = int(pick("limit", default="50"))
         except (TypeError, ValueError):
             return Response({"detail": "limit 无效"}, status=status.HTTP_400_BAD_REQUEST)
 
         data = query_bot_products(q=q, platform=platform, limit=limit, on_sale_only=on_sale)
         if fmt in {"text", "plain", "reply", "1", "true"}:
-            return Response(
-                {"ok": True, "text": format_bot_product_reply(data), "count": data["count"]}
-            )
+            return Response({"ok": True, "text": format_bot_product_reply(data), "count": data["count"]})
         return Response(data)
+
+    get = post = _query
 
 
 class ExternalBridgeHealthAPIView(APIView):
@@ -758,56 +764,6 @@ class ExternalBridgeHealthAPIView(APIView):
                 "capabilities": capabilities,
             }
         )
-
-
-class ExternalWechatBotPushAPIView(APIView):
-    """微信机器人推送 → 微信BOT三表：API Key 鉴权，event_id 幂等。"""
-
-    authentication_classes = []
-    permission_classes = [AllowAny]
-
-    def get(self, request):
-        if not api_key_ok(request):
-            return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
-        return Response({"ok": True, "service": "external-wechat-bot-push"})
-
-    def post(self, request):
-        from .wechat_bot_push import ingest_wechat_bot_payload
-
-        if not api_key_ok(request):
-            return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
-        try:
-            result = ingest_wechat_bot_payload(request.data)
-        except ValueError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        if result.get("mode") == "single" and result.get("status") == "created":
-            return Response(result, status=status.HTTP_201_CREATED)
-        return Response(result, status=status.HTTP_200_OK)
-
-
-class ExternalLedgerPushAPIView(APIView):
-    """微信机器人推送 → 记账表 LedgerRecord：API Key 鉴权，event_id 幂等。"""
-
-    authentication_classes = []
-    permission_classes = [AllowAny]
-
-    def get(self, request):
-        if not api_key_ok(request):
-            return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
-        return Response({"ok": True, "service": "external-ledger-push"})
-
-    def post(self, request):
-        from .ledger_push import ingest_ledger_push_payload
-
-        if not api_key_ok(request):
-            return Response({"detail": "未授权"}, status=status.HTTP_401_UNAUTHORIZED)
-        try:
-            result = ingest_ledger_push_payload(request.data)
-        except ValueError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        if result.get("mode") == "single" and result.get("status") == "created":
-            return Response(result, status=status.HTTP_201_CREATED)
-        return Response(result, status=status.HTTP_200_OK)
 
 
 class WechatBotRecordListAPIView(APIView):
@@ -926,17 +882,37 @@ class StaffUsersListAPIView(APIView):
         return Response(UserSerializer(qs, many=True).data)
 
 
-class PaymentTutorialListAPIView(generics.ListAPIView):
+class _NamedListAPIView(generics.ListAPIView):
+    """职员端只读列表公共基类：按 ordering 排序，可选 is_active 过滤，按 name_params 中的参数名模糊匹配 name。"""
+
     permission_classes = [StaffOnlyPermission]
-    guest_allowed = True
-    serializer_class = PaymentTutorialSerializer
+    model = None
+    ordering = ("sort_order", "id")
+    only_active = False
+    name_params = ("name",)
+    search_fields_extra = ()  # 额外一起匹配的字段（OR）
 
     def get_queryset(self):
-        qs = PaymentTutorial.objects.all().order_by("sort_order", "id")
-        name = (self.request.GET.get("name") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+        qs = self.model.objects.all()
+        if self.only_active:
+            qs = qs.filter(is_active=True)
+        kw = ""
+        for param in self.name_params:
+            kw = (self.request.GET.get(param) or "").strip()
+            if kw:
+                break
+        if kw:
+            cond = Q(name__icontains=kw)
+            for f in self.search_fields_extra:
+                cond |= Q(**{f"{f}__icontains": kw})
+            qs = qs.filter(cond)
+        return qs.order_by(*self.ordering)
+
+
+class PaymentTutorialListAPIView(_NamedListAPIView):
+    guest_allowed = True
+    serializer_class = PaymentTutorialSerializer
+    model = PaymentTutorial
 
 
 class PlatformAccountListAPIView(generics.ListAPIView):
@@ -947,107 +923,61 @@ class PlatformAccountListAPIView(generics.ListAPIView):
         return PlatformAccount.objects.order_by("sort_order", "id")
 
 
-class SharedAppleIDPageListAPIView(generics.ListAPIView):
-    permission_classes = [StaffOnlyPermission]
+class SharedAppleIDPageListAPIView(_NamedListAPIView):
     serializer_class = SharedAppleIDPageSerializer
-
-    def get_queryset(self):
-        qs = SharedAppleIDPage.objects.filter(is_active=True).order_by("sort_order", "id")
-        name = (self.request.GET.get("name") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = SharedAppleIDPage
+    only_active = True
 
 
-class PictCartPageListAPIView(generics.ListAPIView):
-    permission_classes = [StaffOnlyPermission]
+class PictCartPageListAPIView(_NamedListAPIView):
     serializer_class = PictCartPageSerializer
-
-    def get_queryset(self):
-        qs = PictCartPage.objects.filter(is_active=True).order_by("sort_order", "id")
-        name = (self.request.GET.get("name") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = PictCartPage
+    only_active = True
 
 
-class FanboxStatsPageListAPIView(generics.ListAPIView):
+class FanboxStatsPageListAPIView(_NamedListAPIView):
     """游客也可读（前端 fanbox 页对游客开放）。"""
 
-    permission_classes = [StaffOnlyPermission]
     serializer_class = FanboxStatsPageSerializer
     guest_allowed = True
-
-    def get_queryset(self):
-        qs = FanboxStatsPage.objects.filter(is_active=True).order_by("sort_order", "id")
-        name = (self.request.GET.get("name") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = FanboxStatsPage
+    only_active = True
 
 
-class ServiceMonitorPageListAPIView(generics.ListAPIView):
-    permission_classes = [StaffOnlyPermission]
+class ServiceMonitorPageListAPIView(_NamedListAPIView):
     serializer_class = ServiceMonitorPageSerializer
-
-    def get_queryset(self):
-        qs = ServiceMonitorPage.objects.filter(is_active=True).order_by("sort_order", "id")
-        name = (self.request.GET.get("name") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = ServiceMonitorPage
+    only_active = True
 
 
-class PlatformTagPoolListAPIView(generics.ListAPIView):
-    permission_classes = [StaffOnlyPermission]
+class PlatformTagPoolListAPIView(_NamedListAPIView):
     serializer_class = PlatformTagPoolSerializer
-
-    def get_queryset(self):
-        qs = PlatformTagPool.objects.all().order_by("order", "id")
-        name = (self.request.GET.get("name") or self.request.GET.get("q") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = PlatformTagPool
+    ordering = ("order", "id")
+    name_params = ("name", "q")
 
 
-class ChannelTagPoolListAPIView(generics.ListAPIView):
-    permission_classes = [StaffOnlyPermission]
+class ChannelTagPoolListAPIView(_NamedListAPIView):
     serializer_class = ChannelTagPoolSerializer
-
-    def get_queryset(self):
-        qs = ChannelTagPool.objects.all().order_by("order", "id")
-        name = (self.request.GET.get("name") or self.request.GET.get("q") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = ChannelTagPool
+    ordering = ("order", "id")
+    name_params = ("name", "q")
 
 
-class TutorialPoolListAPIView(generics.ListAPIView):
+class TutorialPoolListAPIView(_NamedListAPIView):
     """教程池列表（职员端浏览 / 后续 SKU 选取）。"""
 
-    permission_classes = [StaffOnlyPermission]
     serializer_class = TutorialPoolSerializer
-
-    def get_queryset(self):
-        qs = TutorialPool.objects.all().order_by("sort_order", "id")
-        name = (self.request.GET.get("name") or "").strip()
-        if name:
-            qs = qs.filter(name__icontains=name)
-        return qs
+    model = TutorialPool
 
 
-class PhrasePoolListAPIView(generics.ListAPIView):
+class PhrasePoolListAPIView(_NamedListAPIView):
     """话术池列表（后续 SKU 选取）。"""
 
-    permission_classes = [StaffOnlyPermission]
     serializer_class = PhrasePoolSerializer
-
-    def get_queryset(self):
-        qs = PhrasePool.objects.all().order_by("sort_order", "id")
-        q = (self.request.GET.get("q") or self.request.GET.get("name") or "").strip()
-        if q:
-            qs = qs.filter(Q(name__icontains=q) | Q(content__icontains=q))
-        return qs
+    model = PhrasePool
+    name_params = ("q", "name")
+    search_fields_extra = ("content",)
 
 
 class UsdProxyPriceTierListAPIView(generics.ListAPIView):

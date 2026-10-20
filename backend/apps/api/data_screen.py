@@ -296,7 +296,7 @@ def _trend_daily(date_from, date_to, qs, grain="day"):
 
 def _history_month_gmv(months: int = 12):
     """近 N 个自然月 GMV（含本月），不受周期下拉影响。"""
-    today = timezone.now().date()
+    today = timezone.localdate()
     end_month = today.replace(day=1)
     y, m = end_month.year, end_month.month
     for _ in range(months - 1):
@@ -376,7 +376,7 @@ def _build_period_block(date_from, date_to, prev_summary=None, prev_bot=None):
 
 
 def build_data_screen_payload(user=None):
-    today = timezone.now().date()
+    today = timezone.localdate()
     start_week = today - timedelta(days=today.weekday())
     month_start = today.replace(day=1)
     year_start = today.replace(month=1, day=1)

@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import admin_catalog_views, ledger_views, views
+from . import admin_catalog_views, ledger_views, manage_accounts, manage_catalog, manage_content, manage_pools, manage_sku, views
 
 app_name = "api"
 
@@ -129,4 +129,9 @@ urlpatterns = [
     path("fanbox-stats-pages/", views.FanboxStatsPageListAPIView.as_view(), name="fanbox-stats-pages"),
     path("service-monitor-pages/", views.ServiceMonitorPageListAPIView.as_view(), name="service-monitor-pages"),
     path("", include(router.urls)),
+    *manage_catalog.urlpatterns,
+    *manage_pools.urlpatterns,
+    *manage_content.urlpatterns,
+    *manage_accounts.urlpatterns,
+    *manage_sku.urlpatterns,
 ]

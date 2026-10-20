@@ -1,0 +1,285 @@
+:root {
+  /* 标题：思源黑体系 / Noto Sans SC（字重在各标题选择器上） */
+  --font-heading: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* 正文 */
+  --font-body: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --green-950: #052e16;
+  --green-900: #14532d;
+  --green-800: #166534;
+  --green-700: #15803d;
+  --green-100: #dcfce7;
+  --cream: #fffbeb;
+  --white: #ffffff;
+  --gold-700: #a16207;
+  --gold-600: #b45309;
+  --gold-500: #ca8a04;
+  --gold-200: #fde68a;
+  --text: #14532d;
+  --text-soft: #3f6212;
+  --muted: #5d714c;
+  --btn-solid-bg: #1b5e20;
+  --btn-solid-text: #ffffff;
+  --btn-hover-bg: #e2eee6;
+  --btn-hover-text: #1b5e20;
+  --btn-hover-border: rgba(45, 125, 103, 0.38);
+  /* 页面底：白 + 浅绿网格线（参考稿 #90D170） */
+  --surface-page: #ffffff;
+  --page-grid-line: #90d170;
+  --page-grid-cell: 30px;
+  --surface-sidebar: #ffffff;
+  --surface-highlight: #e2eee6;
+  /* 更透的毛玻璃：底色 alpha 降低，略加大 blur 兼顾网格上的可读性 */
+  --glass-bg: rgba(255, 255, 255, 0.48);
+  --glass-bg-strong: rgba(255, 255, 255, 0.62);
+  --glass-border: rgba(202, 138, 4, 0.2);
+  --glass-shadow: 0 12px 32px rgba(20, 83, 45, 0.08);
+  --glass-blur: 16px;
+  font-family: var(--font-body);
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  min-height: 100%;
+  background-color: var(--surface-page);
+  /* 30×30px 方格，1px 浅绿线 */
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--page-grid-cell) - 1px),
+      var(--page-grid-line) calc(var(--page-grid-cell) - 1px),
+      var(--page-grid-line) var(--page-grid-cell)
+    ),
+    repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(var(--page-grid-cell) - 1px),
+      var(--page-grid-line) calc(var(--page-grid-cell) - 1px),
+      var(--page-grid-line) var(--page-grid-cell)
+    );
+  /* 不用 fixed：与大量 backdrop-filter 叠在一起时易触发整页重绘卡顿 */
+  background-attachment: scroll;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background: transparent;
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-tap-highlight-color: rgba(20, 83, 45, 0.08);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.brand,
+.ds-main-title,
+.ds-period-title,
+.ds-panel-title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  color: var(--green-900);
+}
+
+h1 {
+  font-weight: 800;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.btn {
+  border: 1px solid rgba(22, 101, 52, 0.2);
+  background: var(--white);
+  border-radius: 10px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: var(--font-body);
+  color: var(--text);
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn:hover:not(:disabled):not(.primary):not(.btn-primary):not(.btn-danger),
+.btn:focus-visible:not(:disabled):not(.primary):not(.btn-primary):not(.btn-danger) {
+  background: var(--btn-hover-bg);
+  color: var(--btn-hover-text);
+  border-color: var(--btn-hover-border);
+}
+
+.btn.primary,
+.btn.btn-primary {
+  background: var(--btn-solid-bg);
+  color: var(--btn-solid-text);
+  border: 1px solid #14532d;
+  box-shadow: none;
+}
+
+.btn.primary:hover:not(:disabled),
+.btn.primary:focus-visible:not(:disabled),
+.btn.primary:active:not(:disabled),
+.btn.btn-primary:hover:not(:disabled),
+.btn.btn-primary:focus-visible:not(:disabled),
+.btn.btn-primary:active:not(:disabled) {
+  background: var(--btn-hover-bg);
+  color: var(--btn-hover-text);
+  border-color: var(--btn-hover-border);
+}
+
+.btn.primary:disabled,
+.btn.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary,
+.btn.btn-secondary {
+  border: 1px solid rgba(22, 101, 52, 0.25);
+  background: rgba(220, 252, 231, 0.65);
+  color: var(--text-soft);
+}
+
+.btn-secondary:hover,
+.btn.btn-secondary:hover {
+  background: var(--btn-hover-bg);
+  color: var(--btn-hover-text);
+  border-color: var(--btn-hover-border);
+}
+
+.btn-danger,
+.btn.btn-danger {
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, 0.35);
+}
+
+.btn-danger:hover:not(:disabled),
+.btn.btn-danger:hover:not(:disabled) {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: rgba(185, 28, 28, 0.4);
+}
+
+.card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 14px;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--glass-shadow);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.field label {
+  color: var(--text-soft);
+  font-weight: 600;
+  font-family: var(--font-body);
+}
+
+.field input,
+.field select,
+.field textarea {
+  border: 1px solid rgba(22, 101, 52, 0.2);
+  border-radius: 10px;
+  padding: 8px 10px;
+  min-height: 34px;
+  font-family: var(--font-body);
+}
+
+@media (max-width: 900px) {
+  .card {
+    padding: 10px;
+    border-radius: 12px;
+  }
+  .btn {
+    min-height: 44px;
+    padding: 8px 12px;
+    font-size: 14px;
+    touch-action: manipulation;
+  }
+  .field input,
+  .field select,
+  .field textarea {
+    width: 100%;
+    min-height: 34px;
+    font-size: 14px;
+  }
+}
+
+.sidebar,
+.status-chip,
+.wrap > .login,
+.card,
+.hall-page,
+.item,
+.panel,
+.image-panel,
+.account-card,
+.tutorials-card,
+.query-block,
+.tutorial-row,
+.payment-card,
+.bl-card,
+.sku-panel,
+.pg-card,
+.platform-tile,
+.ds-frame,
+.ds-panel-inner,
+.ds-kpi,
+.ds-member-card,
+.ds-chart-wrap,
+.ds-table-wrap {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: var(--glass-shadow) !important;
+  backdrop-filter: blur(var(--glass-blur)) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) !important;
+}
+
+.panel,
+.image-panel,
+.sku-panel,
+.payment-card,
+.bl-card,
+.pg-card {
+  background: var(--glass-bg-strong) !important;
+}
+
+/* ---- Vue <Transition>：侧栏移动端遮罩 ---- */
+.mask-fade-enter-active,
+.mask-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.mask-fade-enter-from,
+.mask-fade-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mask-fade-enter-active,
+  .mask-fade-leave-active {
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -16,16 +16,20 @@ def new_uuid() -> str:
     return str(uuid.uuid4())
 
 
+_MAX_MONEY = Decimal("1e12")  # 与 DecimalField(max_digits=14, decimal_places=2) 对齐，防止溢出
+
+
 def decimal_num(v: Any) -> Decimal:
+    """宽松金额解析（允许负数，如负利润）：非数字 / NaN / Infinity / 超范围一律按 0，统一保留两位小数。"""
     if v is None or v == "":
         return Decimal("0")
-    if isinstance(v, Decimal):
-        return v
     try:
-        n = Decimal(str(v).replace(",", "").strip())
+        n = v if isinstance(v, Decimal) else Decimal(str(v).replace(",", "").strip())
     except Exception:
         return Decimal("0")
-    return n
+    if not n.is_finite() or abs(n) >= _MAX_MONEY:
+        return Decimal("0")
+    return n.quantize(Decimal("0.01"))
 
 
 def parse_money_input(v: Any) -> Decimal:

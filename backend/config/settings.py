@@ -36,8 +36,11 @@ _SQLITE_DIR = BASE_DIR / "data"
 _SQLITE_DIR.mkdir(parents=True, exist_ok=True)
 (BASE_DIR / "media").mkdir(parents=True, exist_ok=True)
 
-SECRET_KEY = os.environ.get("BACKEND_SECRET_KEY", "backend-dev-secret-key")
-DEBUG = os.environ.get("BACKEND_DEBUG", "1").strip().lower() in ("1", "true", "yes")
+DEBUG = os.environ.get("BACKEND_DEBUG", "0").strip().lower() in ("1", "true", "yes")
+# 生产环境（DEBUG=0）必须显式配置密钥；本地开发（DEBUG=1）才允许使用内置开发密钥
+SECRET_KEY = os.environ.get("BACKEND_SECRET_KEY") or ("backend-dev-secret-key-only-for-local-debug-0000" if DEBUG else "")
+if not SECRET_KEY:
+    raise RuntimeError("未配置 BACKEND_SECRET_KEY：生产环境请在 .env 中设置强随机密钥（本地开发可设 BACKEND_DEBUG=1）。")
 ALLOWED_HOSTS = [
     x.strip()
     for x in os.environ.get("BACKEND_ALLOWED_HOSTS", "127.0.0.1,localhost,testserver").split(",")
@@ -45,11 +48,9 @@ ALLOWED_HOSTS = [
 ]
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
-    "django.contrib.messages",
     "django.contrib.staticfiles",
     "corsheaders",
     "rest_framework",
@@ -65,27 +66,9 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
-
-TEMPLATES = [
-    {
-        "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],
-        "APP_DIRS": True,
-        "OPTIONS": {
-            "context_processors": [
-                "django.template.context_processors.request",
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
-                "backend.apps.catalog.views.backoffice_context",
-            ],
-        },
-    },
-]
 
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
@@ -111,17 +94,12 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "/media/"
 MEDIA_ROOT = str((BASE_DIR / "media").resolve())
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-LOGIN_URL = "login"
-LOGIN_REDIRECT_URL = "backoffice:backoffice_home"
-LOGOUT_REDIRECT_URL = "login"
 
-# 管理后台 / django-admin 会话：自登录起 12 小时有效，到期需重新登录
 SESSION_COOKIE_AGE = 12 * 60 * 60
 SESSION_SAVE_EVERY_REQUEST = False
 
@@ -139,6 +117,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # 登录/刷新令牌接口按 IP 限流，防暴力破解（视图上用 throttle_scope="auth"）
+    "DEFAULT_THROTTLE_RATES": {"auth": "20/min"},
 }
 
 CORS_ALLOWED_ORIGINS = [
@@ -149,6 +129,18 @@ CORS_ALLOWED_ORIGINS = [
     if x.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+# 生产环境安全加固；本地 DEBUG=1 不启用
+if not DEBUG:
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "SAMEORIGIN"
+    CSRF_TRUSTED_ORIGINS = [o.split()[0] for o in CORS_ALLOWED_ORIGINS]
+    # 站点已上 HTTPS 后，在 .env 设 BACKEND_HTTPS=1：Cookie 仅走 HTTPS，并信任反代的 X-Forwarded-Proto。
+    # 纯 HTTP 访问时不要设，否则浏览器不会回传登录 Cookie 导致无法登录。
+    if os.environ.get("BACKEND_HTTPS", "").strip().lower() in ("1", "true", "yes"):
+        SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+        SESSION_COOKIE_SECURE = True
+        CSRF_COOKIE_SECURE = True
 
 # 企业微信内部群「消息推送」Webhook（见官方文档：消息推送配置说明）
 WECOM_REMINDER_ENABLED = (os.environ.get("WECOM_REMINDER_ENABLED") or "").strip().lower() in (
