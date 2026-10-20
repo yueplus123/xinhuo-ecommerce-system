@@ -104,7 +104,8 @@ def main():
     skus_by_biz = defaultdict(list)
     for s in q(f"select {sel} from catalog_sku order by business_id, id"):
         names = [n.strip() for n in (s.get("tutorial_text") or "").split(TUTORIAL_SEP) if n.strip()]
-        imgs = ([media(s["image"])] if s.get("image") else []) + images.get(s["id"], [])
+        # 主截图和会员截图常是同一个文件，去重
+        imgs = list(dict.fromkeys(([media(s["image"])] if s.get("image") else []) + images.get(s["id"], [])))
         pt = s.get("price_type") or ""
         skus_by_biz[s["business_id"]].append({
             "id": s["id"],
