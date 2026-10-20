@@ -135,7 +135,7 @@ async function load() {
 function goBusinesses(platformId: number | string) {
   const kw = (q.value || '').trim()
   router.push({
-    name: 'PlatformBusinesses',
+    name: 'PlatformBusinessesClassic',
     params: { platformId: String(platformId) },
     query: kw ? { q: kw } : undefined
   })

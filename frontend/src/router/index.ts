@@ -81,28 +81,29 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         meta: { title: '大厅', icon: 'House', guestAllowed: true, navGroup: 1 }
       },
       {
+        // 平台/商品（新版，淘宝样式）：内嵌 public/library.html
         path: 'products',
-        component: () => import('@/views/Xinhuo/products/PlatformGridPage.vue'),
+        component: () => import('@/views/Xinhuo/products/CatalogLibraryPage.vue'),
         name: 'ProductPlatforms',
         meta: { title: '平台/商品', icon: 'Goods', guestAllowed: true, navGroup: 1 }
       },
       {
-        // 外链菜单：员工商品库（淘宝样式，静态页 public/library.html，数据来自 /api/catalog/library/）
-        path: 'catalog-library-link',
-        component: { render: () => null },
-        name: 'CatalogLibraryLink',
-        meta: {
-          title: '员工商品库',
-          icon: 'Shop',
-          guestAllowed: true,
-          navGroup: 1,
-          noTagsView: true,
-          externalUrl: '/library.html'
-        }
+        // 旧版平台列表，保留备用
+        path: 'products/classic',
+        component: () => import('@/views/Xinhuo/products/PlatformGridPage.vue'),
+        name: 'ProductPlatformsClassic',
+        meta: { title: '平台/商品（旧版）', hidden: true, canTo: true, activeMenu: '/products', guestAllowed: true }
       },
       {
-        path: 'products/:platformId',
+        path: 'products/classic/:platformId',
         component: () => import('@/views/Xinhuo/products/BusinessListPage.vue'),
+        name: 'PlatformBusinessesClassic',
+        meta: { title: '业务商品（旧版）', hidden: true, canTo: true, activeMenu: '/products', guestAllowed: true }
+      },
+      {
+        // 新版平台页：/products/平台ID
+        path: 'products/:platformId',
+        component: () => import('@/views/Xinhuo/products/CatalogLibraryPage.vue'),
         name: 'PlatformBusinesses',
         meta: {
           title: '业务商品',

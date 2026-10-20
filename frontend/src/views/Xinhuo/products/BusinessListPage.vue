@@ -487,7 +487,7 @@ function statusPillClass(status) {
 }
 
 function closeBusinessPage() {
-  router.push({ name: "ProductPlatforms" });
+  router.push({ name: "ProductPlatformsClassic" });
 }
 
 async function copyText(text) {

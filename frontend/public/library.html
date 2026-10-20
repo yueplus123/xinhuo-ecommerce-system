@@ -248,7 +248,8 @@ a.opt{color:var(--ink)}
       </div>
       <div class="drop hidden" id="drop"></div>
     </div>
-    <a href="/" class="back-sys">返回系统</a>
+    <a href="/" class="back-sys" id="backSys">返回系统</a>
+    <a href="/products/classic" class="back-sys hidden" id="classicLink" target="_top">旧版页面</a>
   </div>
 </div>
 
@@ -377,11 +378,17 @@ a.opt{color:var(--ink)}
 <textarea class="copybuf" id="buf" aria-hidden="true" tabindex="-1"></textarea>
 
 <script>
+// 内嵌在职员端「平台/商品」里时：不显示“返回系统”，改为“旧版页面”入口
+var EMBED = false;
+try { EMBED = window.self !== window.top; } catch(e) { EMBED = true; }
+if (EMBED){ document.getElementById('backSys').classList.add('hidden'); document.getElementById('classicLink').classList.remove('hidden'); }
+</script>
+<script>
 // ---------- 加载：沿用职员端的登录（localStorage 里的 JWT） ----------
 (function(){
   var API = '/api';
   function gate(msg){
-    document.querySelector('.page').innerHTML = '<div class="gate"><b>'+msg+'</b><span style="color:#6B6B6B;font-size:14px">员工商品库使用职员端的登录状态</span><a href="/login">去登录</a></div>';
+    document.querySelector('.page').innerHTML = '<div class="gate"><b>'+msg+'</b><span style="color:#6B6B6B;font-size:14px">员工商品库使用职员端的登录状态</span><a href="/login" target="_top">去登录</a></div>';
     document.body.classList.add('no-bb');
   }
   function get(token){ return fetch(API+'/catalog/library/', {headers: token ? {Authorization:'Bearer '+token} : {}}); }
