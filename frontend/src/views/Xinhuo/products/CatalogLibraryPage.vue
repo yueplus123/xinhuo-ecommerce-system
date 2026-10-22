@@ -38,6 +38,6 @@ const src = computed(() => {
   height: 100%;
   border: 0;
   border-radius: 12px;
-  background: #f3f3f3;
+  background: transparent;
 }
 </style>
