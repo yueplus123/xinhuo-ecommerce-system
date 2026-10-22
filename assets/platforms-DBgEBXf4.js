@@ -1,0 +1,1 @@
+import{j as t}from"./index-TRaK9ZV1.js";const o=s=>t.get("/platforms/",{params:s}),r=s=>t.get("/platforms/export-businesses/",{params:s,responseType:"blob"}),a=s=>t.get(`/platforms/${s}/`),p=()=>t.get("/usd-proxy-price-tiers/");export{p as a,r as e,a as g,o as l};
