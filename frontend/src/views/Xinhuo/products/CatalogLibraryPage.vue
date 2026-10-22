@@ -11,10 +11,13 @@ defineOptions({ name: 'ProductPlatforms' })
 
 const route = useRoute()
 
+// 每次打开都带上时间戳，避免浏览器一直用缓存里的旧版 library.html
+const bust = Date.now()
+
 const src = computed(() => {
   const raw = route.params.platformId
   const id = Array.isArray(raw) ? raw[0] : raw
-  return '/library.html' + (id && /^\d+$/.test(String(id)) ? `#/p/${id}` : '#/')
+  return `/library.html?v=${bust}` + (id && /^\d+$/.test(String(id)) ? `#/p/${id}` : '#/')
 })
 </script>
 
