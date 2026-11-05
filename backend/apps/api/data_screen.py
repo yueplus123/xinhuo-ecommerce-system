@@ -29,6 +29,7 @@ _BOT_BUSINESS_DEFS = (
     ("mega", "mega", "sku"),
     ("chatgpt", "gpt", "sku"),
     ("once_card", "一次卡", "qty"),
+    ("remote", "远程", "qty"),
 )
 # 仅排除已作废；ACTIVE(未清空) / PROCESSED(已清空) 都计入
 _BOT_EXCLUDED_STATUS = ("REVERSED", "DELETED", "VOID")

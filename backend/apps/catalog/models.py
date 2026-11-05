@@ -999,6 +999,7 @@ class WechatBotRecord(models.Model):
         COMMISSION = "commission", "约稿"
         BOOTH = "booth", "booth"
         PICTSPACE = "pictspace", "pictspace"
+        REMOTE = "remote", "远程"
         PREMIUM = "premium", "高级会员"
         MEGA = "mega", "mega"
         CHATGPT = "chatgpt", "gpt"

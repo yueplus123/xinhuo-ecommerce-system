@@ -40,6 +40,8 @@ _TABLE_ALIASES = {
     "booth": TT.BOOTH,
     "pictspace": TT.PICTSPACE,
     "pict": TT.PICTSPACE,
+    "remote": TT.REMOTE,
+    "远程": TT.REMOTE,
     "premium": TT.PREMIUM,
     "高级会员": TT.PREMIUM,
     "vip": TT.PREMIUM,
@@ -346,6 +348,56 @@ def ingest_wechat_bot_pull(raw: dict) -> dict:
     }
 
 
+def ingest_wechat_bot_clear(raw: dict) -> dict:
+    """机器人「清空-姓名」/「清空业务-姓名」：在薪火侧把该员工未清空记单改为已清空。
+
+    必填 employee_name；可选 business_name / table_type 只清单项业务。
+    USDT 不存在清空，永远不会被本操作修改。
+    """
+    if not isinstance(raw, dict):
+        raise ValueError("记录必须是 JSON 对象")
+    employee_name = str(raw.get("employee_name") or "").strip()
+    if not employee_name:
+        raise ValueError("employee_name 必填（避免误清全员）")
+    business_name = str(raw.get("business_name") or "").strip()
+    table_type = str(raw.get("table_type") or "").strip()
+
+    qs = WechatBotRecord.objects.filter(
+        employee_name=employee_name, status="ACTIVE"
+    ).exclude(table_type=TT.USDT)
+    tt_val = ""
+    if table_type or business_name:
+        key = table_type or business_name
+        if key in TABLE_TYPES:
+            tt_val = key
+        else:
+            mapped = _TABLE_ALIASES.get(key) or _TABLE_ALIASES.get(key.lower())
+            if mapped is None:
+                raise ValueError(f"业务无效：{key}")
+            tt_val = getattr(mapped, "value", None) or str(mapped)
+        if tt_val == TT.USDT:
+            raise ValueError("USDT 不支持清空")
+        qs = qs.filter(table_type=tt_val)
+
+    with transaction.atomic():
+        rows = list(qs.select_for_update().only("id", "table_type", "external_id"))
+        by_table: dict[str, int] = {}
+        for r in rows:
+            label = TT(r.table_type).label if r.table_type in TABLE_TYPES else r.table_type
+            by_table[label] = by_table.get(label, 0) + 1
+        if rows:
+            WechatBotRecord.objects.filter(id__in=[r.id for r in rows]).update(
+                status="PROCESSED", updated_at=timezone.now()
+            )
+    return {
+        "cleared": len(rows),
+        "by_table": by_table,
+        "event_ids": [r.external_id for r in rows if r.external_id],
+        "employee_name": employee_name,
+        "table_type": tt_val,
+    }
+
+
 def ingest_wechat_bot_payload(body) -> dict:
     if not isinstance(body, dict):
         raise ValueError("请求体必须是 JSON 对象")
@@ -353,6 +405,9 @@ def ingest_wechat_bot_payload(body) -> dict:
     if action in {"pull", "sync", "list"}:
         r = ingest_wechat_bot_pull(body)
         return {"ok": True, "mode": "pull", **r}
+    if action == "clear":
+        r = ingest_wechat_bot_clear(body)
+        return {"ok": True, "mode": "clear", **r}
     # 顶层 action=status/delete：单条生命周期
     if action in {"status", "delete"} and "items" not in body:
         if action == "status":

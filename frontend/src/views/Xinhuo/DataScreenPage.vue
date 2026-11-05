@@ -132,6 +132,7 @@ const BOT_CARD_META: Record<string, { icon: string; tone: string }> = {
   patreon: { icon: '🧡', tone: 'shopping' },
   booth: { icon: '🏪', tone: 'message' },
   pictspace: { icon: '🖼', tone: 'money' },
+  remote: { icon: '🖥', tone: 'peoples' },
   premium: { icon: '⭐', tone: 'shopping' },
   mega: { icon: '💾', tone: 'peoples' },
   chatgpt: { icon: '🤖', tone: 'message' },

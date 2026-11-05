@@ -35,6 +35,7 @@ export const WECHAT_BOT_TABLES: WechatBotTableDef[] = [
   { key: 'commission', label: '约稿', path: '/wechat-bot-data/commission', layout: 'qty' },
   { key: 'booth', label: 'booth', path: '/wechat-bot-data/booth', layout: 'qty' },
   { key: 'pictspace', label: 'pictspace', path: '/wechat-bot-data/pictspace', layout: 'qty' },
+  { key: 'remote', label: '远程', path: '/wechat-bot-data/remote', layout: 'qty' },
   { key: 'premium', label: '高级会员', path: '/wechat-bot-data/premium', layout: 'sku' },
   { key: 'mega', label: 'mega', path: '/wechat-bot-data/mega', layout: 'sku' },
   { key: 'chatgpt', label: 'gpt', path: '/wechat-bot-data/chatgpt', layout: 'sku' },
