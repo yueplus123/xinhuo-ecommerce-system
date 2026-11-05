@@ -145,12 +145,13 @@ const botBusinessCards = computed(() => {
     return rows.map((r: any) => {
       const meta = BOT_CARD_META[r.key] || { icon: '📊', tone: 'message' }
       const isUsdt = r.unit === 'usd' || r.layout === 'usdt'
+      const isCny = r.unit === 'cny' || r.layout === 'amount'
       return {
         key: r.key,
         title: r.label || r.key,
         value: safeNum(r.value),
-        prefix: isUsdt ? '$' : '',
-        precision: isUsdt ? 2 : 0,
+        prefix: isUsdt ? '$' : isCny ? '¥' : '',
+        precision: isUsdt || isCny ? 2 : 0,
         footer: '环比',
         delta: r.change_pct,
         tone: meta.tone,

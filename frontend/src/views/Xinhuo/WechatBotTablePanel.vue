@@ -274,6 +274,10 @@ async function onCreate() {
       return
     }
   }
+  if (layout.value === 'amount' && String(createForm.amount_cny ?? '').trim() === '') {
+    ElMessage.warning('请填写金额')
+    return
+  }
 
   creating.value = true
   try {
@@ -287,6 +291,9 @@ async function onCreate() {
     if (layout.value === 'usdt') {
       body.amount_cny = createForm.amount_cny || '0'
       body.amount_usd = createForm.amount_usd || '0'
+      body.quantity = 0
+    } else if (layout.value === 'amount') {
+      body.amount_cny = createForm.amount_cny || '0'
       body.quantity = 0
     } else {
       body.quantity = Number(createForm.quantity) || 1
@@ -357,6 +364,10 @@ async function saveEdit() {
       return
     }
   }
+  if (layout.value === 'amount' && String(editForm.amount_cny ?? '').trim() === '') {
+    ElMessage.warning('请填写金额')
+    return
+  }
 
   editSaving.value = true
   try {
@@ -369,6 +380,9 @@ async function saveEdit() {
     if (layout.value === 'usdt') {
       body.amount_cny = editForm.amount_cny || '0'
       body.amount_usd = editForm.amount_usd || '0'
+      body.quantity = 0
+    } else if (layout.value === 'amount') {
+      body.amount_cny = editForm.amount_cny || '0'
       body.quantity = 0
     } else {
       body.quantity = Number(editForm.quantity) || 1
@@ -428,11 +442,14 @@ onMounted(() => {
             style="width: 160px"
           />
         </ElFormItem>
-        <ElFormItem v-if="layout !== 'usdt'" label="数量">
+        <ElFormItem v-if="layout === 'qty' || layout === 'sku'" label="数量">
           <ElSelect v-model="createForm.quantity" style="width: 90px">
             <ElOption :value="1" label="+1" />
             <ElOption :value="-1" label="-1" />
           </ElSelect>
+        </ElFormItem>
+        <ElFormItem v-if="layout === 'amount'" label="金额">
+          <ElInput v-model="createForm.amount_cny" placeholder="0.00" clearable style="width: 120px" />
         </ElFormItem>
         <ElFormItem v-if="layout === 'usdt'" label="人民币数">
           <ElInput v-model="createForm.amount_cny" placeholder="0.00" clearable style="width: 120px" />
@@ -525,11 +542,14 @@ onMounted(() => {
         <ElFormItem v-if="layout === 'sku'" label="业务名">
           <ElInput v-model="editForm.business_name" placeholder="如：一个月 / pro100刀" clearable />
         </ElFormItem>
-        <ElFormItem v-if="layout !== 'usdt'" label="数量">
+        <ElFormItem v-if="layout === 'qty' || layout === 'sku'" label="数量">
           <ElSelect v-model="editForm.quantity" style="width: 120px">
             <ElOption :value="1" label="+1" />
             <ElOption :value="-1" label="-1" />
           </ElSelect>
+        </ElFormItem>
+        <ElFormItem v-if="layout === 'amount'" label="金额">
+          <ElInput v-model="editForm.amount_cny" placeholder="0.00" clearable />
         </ElFormItem>
         <ElFormItem v-if="layout === 'usdt'" label="人民币数">
           <ElInput v-model="editForm.amount_cny" placeholder="0.00" clearable />

@@ -1,7 +1,7 @@
 import type { TableColumn } from '@/components/Table'
 
-/** 列布局：qty=数量表；sku=多SKU；usdt=人民币/美金 */
-export type WechatBotColumnLayout = 'qty' | 'sku' | 'usdt'
+/** 列布局：qty=数量表；sku=多SKU；usdt=人民币/美金；amount=金额（远程） */
+export type WechatBotColumnLayout = 'qty' | 'sku' | 'usdt' | 'amount'
 
 export type WechatBotTableDef = {
   key: string
@@ -18,11 +18,13 @@ const COL_CLEAR: TableColumn = { field: 'clear_status', label: '清空状态', w
 const COL_REMARK: TableColumn = { field: 'remark', label: '备注', minWidth: 140 }
 const COL_CNY: TableColumn = { field: 'amount_cny', label: '人民币数', minWidth: 110 }
 const COL_USD: TableColumn = { field: 'amount_usd', label: '美金数', minWidth: 110 }
+const COL_AMOUNT: TableColumn = { field: 'amount_cny', label: '金额', minWidth: 110 }
 
 export const WECHAT_BOT_COLUMNS: Record<WechatBotColumnLayout, TableColumn[]> = {
   qty: [COL_TIME, COL_QTY, COL_EMP, COL_CLEAR, COL_REMARK],
   sku: [COL_TIME, COL_BIZ, COL_QTY, COL_EMP, COL_CLEAR, COL_REMARK],
-  usdt: [COL_TIME, COL_CNY, COL_USD, COL_EMP, COL_CLEAR, COL_REMARK]
+  usdt: [COL_TIME, COL_CNY, COL_USD, COL_EMP, COL_CLEAR, COL_REMARK],
+  amount: [COL_TIME, COL_AMOUNT, COL_EMP, COL_CLEAR, COL_REMARK]
 }
 
 export const WECHAT_BOT_TABLES: WechatBotTableDef[] = [
@@ -35,7 +37,7 @@ export const WECHAT_BOT_TABLES: WechatBotTableDef[] = [
   { key: 'commission', label: '约稿', path: '/wechat-bot-data/commission', layout: 'qty' },
   { key: 'booth', label: 'booth', path: '/wechat-bot-data/booth', layout: 'qty' },
   { key: 'pictspace', label: 'pictspace', path: '/wechat-bot-data/pictspace', layout: 'qty' },
-  { key: 'remote', label: '远程', path: '/wechat-bot-data/remote', layout: 'qty' },
+  { key: 'remote', label: '远程', path: '/wechat-bot-data/remote', layout: 'amount' },
   { key: 'premium', label: '高级会员', path: '/wechat-bot-data/premium', layout: 'sku' },
   { key: 'mega', label: 'mega', path: '/wechat-bot-data/mega', layout: 'sku' },
   { key: 'chatgpt', label: 'gpt', path: '/wechat-bot-data/chatgpt', layout: 'sku' },

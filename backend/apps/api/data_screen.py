@@ -29,7 +29,7 @@ _BOT_BUSINESS_DEFS = (
     ("mega", "mega", "sku"),
     ("chatgpt", "gpt", "sku"),
     ("once_card", "一次卡", "qty"),
-    ("remote", "远程", "qty"),
+    ("remote", "远程", "amount"),
 )
 # 仅排除已作废；ACTIVE(未清空) / PROCESSED(已清空) 都计入
 _BOT_EXCLUDED_STATUS = ("REVERSED", "DELETED", "VOID")
@@ -90,12 +90,12 @@ def _bot_period_qs(date_from: date | None, date_to: date | None):
 
 def _bot_business_metrics(date_from: date | None, date_to: date | None) -> list[dict]:
     """
-    各业务 KPI：数量表/多SKU → quantity 合计；USDT → amount_usd 合计。
+    各业务 KPI：数量表/多SKU → quantity 合计；USDT → amount_usd 合计；远程 → 金额合计。
     """
     rows = (
         _bot_period_qs(date_from, date_to)
         .values("table_type")
-        .annotate(qty=Sum("quantity"), usd=Sum("amount_usd"), cnt=Count("id"))
+        .annotate(qty=Sum("quantity"), usd=Sum("amount_usd"), cny=Sum("amount"), cnt=Count("id"))
     )
     by_type = {r["table_type"]: r for r in rows}
     out: list[dict] = []
@@ -104,6 +104,9 @@ def _bot_business_metrics(date_from: date | None, date_to: date | None) -> list[
         if layout == "usdt":
             value = _money_two_decimals(r.get("usd"))
             unit = "usd"
+        elif layout == "amount":
+            value = _money_two_decimals(r.get("cny"))
+            unit = "cny"
         else:
             value = int(r.get("qty") or 0)
             unit = "qty"

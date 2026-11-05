@@ -352,6 +352,7 @@ def ingest_wechat_bot_clear(raw: dict) -> dict:
     """机器人「清空-姓名」/「清空业务-姓名」：在薪火侧把该员工未清空记单改为已清空。
 
     必填 employee_name；可选 business_name / table_type 只清单项业务。
+    不传业务时清全部记单业务，但不含远程（远程须显式 table_type=remote）。
     USDT 不存在清空，永远不会被本操作修改。
     """
     if not isinstance(raw, dict):
@@ -378,6 +379,9 @@ def ingest_wechat_bot_clear(raw: dict) -> dict:
         if tt_val == TT.USDT:
             raise ValueError("USDT 不支持清空")
         qs = qs.filter(table_type=tt_val)
+    else:
+        # 「清空-姓名」不含远程：远程按金额记，由管理员发「清空远程」单独清
+        qs = qs.exclude(table_type=TT.REMOTE)
 
     with transaction.atomic():
         rows = list(qs.select_for_update().only("id", "table_type", "external_id"))
