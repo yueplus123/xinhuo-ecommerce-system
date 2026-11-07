@@ -1052,3 +1052,82 @@ class WechatBotRecord(models.Model):
 
     def __str__(self) -> str:
         return f"{self.table_type} · {self.amount} · {self.external_id}"
+
+
+class DutySettings(models.Model):
+    """值班打卡规则（只有一行）：A/B 是谁、轮流起点、库存目标、月底/月初任务安排。具体字段见 catalog/duty.py。"""
+
+    config = models.JSONField(default=dict, blank=True, verbose_name="规则")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="最后修改人",
+    )
+
+    class Meta:
+        verbose_name = "值班打卡规则"
+        verbose_name_plural = "值班打卡规则"
+
+    def __str__(self) -> str:
+        return "值班打卡规则"
+
+
+class DutyRecord(models.Model):
+    """值班打卡记录：某天某件事由谁在什么时候完成。只能当天打卡、当天修改。"""
+
+    TASK_SELL = "sell"
+    TASK_STOCK = "stock"
+    TASK_CLEAN = "clean"
+    TASK_UNBIND = "unbind"
+    TASK_CHOICES = (
+        (TASK_SELL, "销卡"),
+        (TASK_STOCK, "增加成品号库存"),
+        (TASK_CLEAN, "清理卡片 + 通知充值"),
+        (TASK_UNBIND, "解绑卡片"),
+    )
+
+    date = models.DateField(db_index=True, verbose_name="日期")
+    task = models.CharField(max_length=16, choices=TASK_CHOICES, verbose_name="事项")
+    assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="duty_assigned",
+        verbose_name="负责人",
+    )
+    done_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="duty_done",
+        verbose_name="打卡人",
+    )
+    by_manager = models.BooleanField(default=False, verbose_name="老板代打")
+    done_at = models.DateTimeField(verbose_name="打卡时间")
+    edited_at = models.DateTimeField(null=True, blank=True, verbose_name="最后修改时间")
+    data = models.JSONField(default=dict, blank=True, verbose_name="反馈内容")
+    image = models.ImageField(upload_to="duty/%Y%m/", null=True, blank=True, verbose_name="截图")
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="确认人",
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name="确认时间")
+
+    class Meta:
+        ordering = ["-date", "task"]
+        verbose_name = "值班打卡记录"
+        verbose_name_plural = "值班打卡记录"
+        constraints = [models.UniqueConstraint(fields=("date", "task"), name="catalog_duty_once_per_day_task")]
+
+    def __str__(self) -> str:
+        return f"{self.date} · {self.get_task_display()}"

@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import admin_catalog_views, catalog_library, ledger_views, manage_accounts, manage_catalog, manage_content, manage_pools, manage_sku, views
+from . import admin_catalog_views, catalog_library, duty_views, ledger_views, manage_accounts, manage_catalog, manage_content, manage_pools, manage_sku, views
 
 app_name = "api"
 
@@ -129,6 +129,11 @@ urlpatterns = [
     path("pict-cart-pages/", views.PictCartPageListAPIView.as_view(), name="pict-cart-pages"),
     path("fanbox-stats-pages/", views.FanboxStatsPageListAPIView.as_view(), name="fanbox-stats-pages"),
     path("service-monitor-pages/", views.ServiceMonitorPageListAPIView.as_view(), name="service-monitor-pages"),
+    path("duty/state/", duty_views.DutyStateAPIView.as_view(), name="duty-state"),
+    path("duty/checkin/", duty_views.DutyCheckinAPIView.as_view(), name="duty-checkin"),
+    path("duty/undo/", duty_views.DutyUndoAPIView.as_view(), name="duty-undo"),
+    path("duty/confirm/", duty_views.DutyConfirmAPIView.as_view(), name="duty-confirm"),
+    path("duty/settings/", duty_views.DutySettingsAPIView.as_view(), name="duty-settings"),
     path("", include(router.urls)),
     *manage_catalog.urlpatterns,
     *manage_pools.urlpatterns,
