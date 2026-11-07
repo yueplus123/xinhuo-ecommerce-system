@@ -259,6 +259,12 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         ]
       },
       {
+        path: 'duty-checkin',
+        component: () => import('@/views/Xinhuo/DutyCheckinPage.vue'),
+        name: 'DutyCheckin',
+        meta: { title: '值班打卡', icon: 'Finished', navGroup: 5 }
+      },
+      {
         path: 'material-renewal',
         component: () => import('@/views/Xinhuo/MaterialRenewalPage.vue'),
         name: 'MaterialRenewal',
