@@ -1,0 +1,1 @@
+import{j as s}from"./index-IX1wrDjd.js";const a=()=>s.get("/fanbox-stats-pages/"),e=()=>s.get("/pict-cart-pages/"),o=()=>s.get("/service-monitor-pages/"),c=()=>s.get("/shared-apple-id-pages/"),i=()=>s.get("/platform-accounts/");export{a,e as b,i as c,o as d,c as l};

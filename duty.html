@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>值班打卡 - 薪火</title>
+<style>
+:root{
+  --g:#00704A; --g-ink:#1E3932; --g-soft:#D4E9E2; --gold:#CBA258; --gold-soft:#F4ECDD; --gold-ink:#7A5A1E;
+  --bg:#F2F0EB; --card:#FFF; --ink:#1E2522; --ink2:#3F4945; --muted:#5F6B66; --faint:#86918C;
+  --line:#E6E2DA; --line2:#D3CEC4; --soft:#F7F5F0;
+  --red:#C45656; --red-soft:#FBECEC; --amber:#B8873A; --amber-soft:#FBF3E4; --blue:#3B6EA8; --blue-soft:#E1EBF6;
+}
+html.dark{
+  color-scheme:dark;
+  --g:#2FA37A; --g-ink:#A7E3C9; --g-soft:#173A2E; --gold-soft:#2E2717; --gold-ink:#E2C48A;
+  --bg:#0E1714; --card:#16211D; --ink:#E7EEEA; --ink2:#C3CEC9; --muted:#9BA8A2; --faint:#7E8B85;
+  --line:#26342F; --line2:#34453E; --soft:#1C2925;
+  --red:#E07A7A; --red-soft:#3A1F1F; --amber:#D9AE62; --amber-soft:#33270F; --blue:#6FA0D8; --blue-soft:#18283A;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif}
+button,input,select,textarea{font-family:inherit;color:inherit}
+.hidden{display:none!important}
+.mono{font-family:ui-monospace,Consolas,monospace}
+.wrap{max-width:1180px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--card);border-radius:14px;border:1px solid var(--line)}
+.bar{padding:12px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.bar h1{margin:0 6px 0 0;font-size:20px}
+.segc{display:inline-flex;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:3px;flex-wrap:wrap}
+.segc button{border:none;background:none;min-height:36px;padding:0 14px;border-radius:7px;font-size:14px;cursor:pointer;color:var(--ink2)}
+.segc button.on{background:var(--g);color:#fff;font-weight:600}
+.btn{min-height:38px;padding:0 14px;border-radius:8px;border:1px solid var(--line2);background:var(--card);font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn:hover{border-color:var(--ink2)}
+.btn.primary{background:var(--g);border-color:var(--g);color:#fff;font-weight:600}
+.btn.gold{background:var(--gold);border-color:var(--gold);color:#1E3932;font-weight:600}
+.btn.sm{min-height:32px;padding:0 10px;font-size:13px}
+.btn.big{min-height:46px;font-size:16px;padding:0 20px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.spacer{flex:1}
+.lab{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.lab select{height:36px;border:1px solid var(--line2);border-radius:8px;background:var(--card);padding:0 8px}
+.pill{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;white-space:nowrap}
+.p-done{background:var(--g-soft);color:var(--g-ink)}
+.p-ok2{background:var(--g);color:#fff}
+.p-todo{background:var(--amber-soft);color:var(--amber)}
+.p-miss{background:var(--red-soft);color:var(--red)}
+.p-short{background:var(--amber-soft);color:var(--amber)}
+.p-plan{background:var(--soft);color:var(--faint);border:1px solid var(--line)}
+.who{font-weight:700}
+.who.me{background:var(--gold);color:#1E3932;border-radius:4px;padding:0 4px}
+h2{margin:0;font-size:17px}
+.sub{font-size:13px;color:var(--muted)}
+
+/* 今天 */
+.hero{padding:16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.ring{--p:0;width:74px;height:74px;border-radius:50%;background:conic-gradient(var(--g) calc(var(--p)*1%),var(--line) 0);display:grid;place-items:center;flex:none}
+.ring b{width:58px;height:58px;border-radius:50%;background:var(--card);display:grid;place-items:center;font-size:17px}
+.hero .t{font-size:18px;font-weight:700}
+.tasks{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.task{padding:14px;display:flex;flex-direction:column;gap:10px;border-left:5px solid var(--c,var(--g))}
+.task .hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.task .ic{font-size:22px}
+.task .nm{font-size:16px;font-weight:700}
+.task .rule{font-size:12px;color:var(--faint)}
+.task .who-line{font-size:14px}
+.target{display:flex;align-items:baseline;gap:6px;font-size:13px;color:var(--muted)}
+.target b{font-size:26px;color:var(--ink);font-family:ui-monospace,Consolas,monospace}
+.fb{background:var(--soft);border-radius:10px;padding:10px;font-size:13px;display:flex;flex-direction:column;gap:4px}
+.fb .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.fb img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in}
+.task.miss{background:color-mix(in srgb,var(--red) 5%,var(--card))}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.c-sell{--c:#00704A}.c-stock{--c:#B8873A}.c-clean{--c:#3B6EA8}.c-unbind{--c:#7B5EA7}
+
+.feed{padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fi{display:flex;gap:10px;align-items:flex-start;font-size:14px;padding:8px 0;border-top:1px dashed var(--line)}
+.fi:first-of-type{border-top:none}
+.fi .tm{font-family:ui-monospace,Consolas,monospace;color:var(--faint);font-size:12px;min-width:86px;padding-top:2px}
+.fi img{width:44px;height:44px;object-fit:cover;border-radius:6px;cursor:zoom-in}
+.alert{padding:12px 14px;border-radius:12px;border:1px solid var(--red);background:color-mix(in srgb,var(--red) 7%,var(--card));color:var(--red);display:flex;flex-direction:column;gap:6px;font-size:14px}
+.alert .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* 本月 */
+.mhead{display:flex;align-items:center;gap:10px;padding:12px 14px;flex-wrap:wrap}
+.mhead .ml{font-size:17px;font-weight:700;min-width:110px;text-align:center}
+.mgrid{display:grid;grid-template-columns:repeat(7,1fr);border-top:1px solid var(--line)}
+.mgrid .wd{padding:8px;font-size:12px;color:var(--faint);text-align:center;border-bottom:1px solid var(--line)}
+.day{min-height:118px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:6px;display:flex;flex-direction:column;gap:3px;cursor:pointer;background:var(--card)}
+.day:nth-child(7n+7){border-right:none}
+.day:hover{background:var(--soft)}
+.day.out{background:var(--soft);opacity:.5;cursor:default}
+.day.today{box-shadow:inset 0 0 0 2px var(--g)}
+.day .dn{font-size:13px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.day .dn .tg{font-size:11px;color:var(--g);font-weight:600}
+.chip{display:flex;align-items:center;gap:4px;font-size:12px;border-radius:5px;padding:1px 5px;border-left:3px solid var(--c);background:color-mix(in srgb,var(--c) 10%,var(--card));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip .st{margin-left:auto;font-weight:700}
+.chip.done .st{color:var(--g)}
+.chip.miss{background:var(--red-soft)}
+.chip.miss .st{color:var(--red)}
+.chip.short .st{color:var(--amber)}
+.chip.todo .st{color:var(--amber)}
+.chip.plan{opacity:.75}
+.mlist{display:none}
+@media (max-width:760px){
+  .mgrid{display:none} .mlist{display:flex;flex-direction:column}
+  .lrow{display:grid;grid-template-columns:56px 1fr;gap:8px;padding:8px 12px;border-top:1px solid var(--line);cursor:pointer}
+  .lrow.today{background:var(--g-soft)}
+  .lrow .ld{font-weight:700;font-size:15px}
+  .lrow .ld small{display:block;font-weight:400;color:var(--faint);font-size:11px}
+  .lrow .lc{display:flex;flex-direction:column;gap:3px}
+}
+.legend{display:flex;gap:12px;flex-wrap:wrap;padding:10px 14px;font-size:12px;color:var(--muted);border-top:1px solid var(--line)}
+
+/* 统计 */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.pcard{padding:14px;display:flex;flex-direction:column;gap:10px}
+.pcard .big{font-size:30px;font-weight:700;font-family:ui-monospace,Consolas,monospace}
+.kv{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:14px}
+.kv span:nth-child(odd){color:var(--muted)}
+.bar2{height:10px;border-radius:5px;background:var(--line);overflow:hidden}
+.bar2 i{display:block;height:100%;background:var(--g)}
+table.stk{width:100%;border-collapse:collapse;font-size:13px}
+table.stk th,table.stk td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+table.stk td.n{font-family:ui-monospace,Consolas,monospace;text-align:right}
+table.stk th.n{text-align:right}
+.stkwrap{max-height:420px;overflow:auto}
+
+/* 设置 */
+.set{padding:14px;display:flex;flex-direction:column;gap:14px}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld>label{font-size:13px;color:var(--muted);font-weight:600}
+.fld .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:14px}
+.set input[type=text],.set input[type=number],.set input[type=date],.set select{height:38px;border:1px solid var(--line2);border-radius:8px;padding:0 10px;background:var(--card);font-size:14px}
+.set input[type=number]{width:100px}
+.lock{background:var(--soft);border:1px dashed var(--line2);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--muted)}
+.ovr{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
+.ovr label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--faint)}
+.ovr input{width:100%!important;height:32px!important}
+.ovr input.changed{border-color:var(--gold)!important;background:var(--gold-soft)!important}
+
+/* 弹窗 */
+.mask{position:fixed;inset:0;background:rgba(30,57,50,.45);backdrop-filter:blur(3px);z-index:50}
+.modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 40px);overflow:auto;background:var(--card);border-radius:16px;z-index:51;box-shadow:0 24px 60px rgba(0,0,0,.3);border:1px solid var(--line)}
+@media (max-width:640px){ .modal{top:auto;bottom:0;left:0;transform:none;width:100%;border-radius:18px 18px 0 0;max-height:92vh} }
+.mh{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:2px solid var(--gold)}
+.mh h3{margin:0;font-size:17px}
+.x{width:40px;height:40px;border:none;background:none;font-size:22px;cursor:pointer;border-radius:8px;color:var(--ink2)}
+.mb{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.mf{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);flex-wrap:wrap}
+.mb .fld input[type=number],.mb .fld input[type=text],.mb textarea{height:42px;border:1px solid var(--line2);border-radius:8px;padding:0 10px;background:var(--card);font-size:15px;width:100%}
+.mb textarea{height:70px;padding:8px 10px;resize:vertical}
+.chk{display:flex;align-items:center;gap:10px;min-height:44px;border:1px solid var(--line2);border-radius:10px;padding:0 12px;cursor:pointer;font-size:15px}
+.chk input{width:20px;height:20px;accent-color:var(--g)}
+.chk.on{border-color:var(--g);background:var(--g-soft)}
+.upl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.upl img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+.dayhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.toast{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);background:rgba(0,0,0,.82);color:#fff;padding:12px 20px;border-radius:10px;z-index:70;font-size:15px;pointer-events:none;max-width:80vw;text-align:center}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:80;display:grid;place-items:center;cursor:zoom-out}
+.lightbox img{max-width:92vw;max-height:88vh;border-radius:8px}
+.gate{padding:40px 20px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}
+.gate a{color:var(--g);font-weight:600}
+.banner{padding:12px 14px;border-radius:12px;border:1px solid var(--gold);background:var(--gold-soft);font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.note{font-size:12px;color:var(--faint);text-align:center;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="card bar">
+    <h1>值班打卡</h1>
+    <div class="segc" id="tabs">
+      <button data-tab="today" class="on">今天</button>
+      <button data-tab="month">本月</button>
+      <button data-tab="stats">统计</button>
+      <button data-tab="settings">设置</button>
+    </div>
+    <span class="spacer"></span>
+    <span class="lab" id="meLabel"></span>
+  </section>
+  <div id="view"><div class="card" style="padding:40px;text-align:center;color:var(--muted)">加载中…</div></div>
+  <div class="note">只能当天打卡、当天修改；过了当天自动锁定，漏了不能补。</div>
+</div>
+
+<div class="mask hidden" id="mask"></div>
+<div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <div class="mh"><h3 id="mTitle"></h3><button class="x" data-close aria-label="关闭">×</button></div>
+  <div class="mb" id="mBody"></div>
+  <div class="mf" id="mFoot"></div>
+</div>
+<div class="toast hidden" id="toast"></div>
+
+<script>
+// ================= 深色 / 浅色：跟随职员端 =================
+(function(){
+  var root=document.documentElement;
+  function fromParent(){ try{ if (window.parent!==window && window.parent.document) return window.parent.document.documentElement.classList.contains('dark'); }catch(e){} return null; }
+  function fromPref(){ var s=null; try{ s=localStorage.getItem('xinhuo-theme'); }catch(e){} return s==='dark' || (s!=='light' && !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)); }
+  function apply(){ var p=fromParent(); root.classList.toggle('dark', p===null?fromPref():p); }
+  apply();
+  try{ var ph=window.parent!==window && window.parent.document && window.parent.document.documentElement; if (ph) new MutationObserver(apply).observe(ph,{attributes:true,attributeFilter:['class']}); }catch(e){}
+  window.addEventListener('storage', function(e){ if (e.key==='xinhuo-theme') apply(); });
+})();
+
+// ================= 基础工具 =================
+function $(id){ return document.getElementById(id); }
+function esc(t){ return String(t==null?'':t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function pad(n){ return (n<10?'0':'')+n; }
+function ymd(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function parse(s){ return new Date(s+'T00:00:00'); }
+function addDays(d,n){ var x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function dim(y,m){ return new Date(y,m+1,0).getDate(); }
+function dayDiff(a,b){ return Math.round((parse(ymd(a))-parse(ymd(b)))/864e5); }
+var WD=['周日','周一','周二','周三','周四','周五','周六'];
+function md(s){ var d=parse(s); return (d.getMonth()+1)+'/'+d.getDate()+' '+WD[d.getDay()]; }
+function hm(t){ var d=new Date(t); return pad(d.getHours())+':'+pad(d.getMinutes()); }
+function toast(t){ var el=$('toast'); el.textContent=t; el.classList.remove('hidden'); clearTimeout(toast._t); toast._t=setTimeout(function(){ el.classList.add('hidden'); },2000); }
+
+// ================= 接口（用职员端的登录状态） =================
+var API='/api', TOKEN=null;
+try{ TOKEN=localStorage.getItem('access_token'); }catch(e){}
+function refresh(){
+  var r=null; try{ r=localStorage.getItem('refresh_token'); }catch(e){}
+  if (!r) return Promise.reject(401);
+  return fetch(API+'/auth/token/refresh/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh:r})})
+    .then(function(x){ if(!x.ok) throw 401; return x.json(); })
+    .then(function(d){ try{ localStorage.setItem('access_token',d.access); }catch(e){} TOKEN=d.access; return d.access; });
+}
+function call(path, opts){
+  opts=opts||{};
+  function go(){ var h=Object.assign({}, opts.headers||{}, {Authorization:'Bearer '+TOKEN}); return fetch(API+path, Object.assign({}, opts, {headers:h})); }
+  return go().then(function(res){ return res.status===401 ? refresh().then(go) : res; })
+    .then(function(res){
+      if (res.status===204) return null;
+      return res.json().catch(function(){ return {}; }).then(function(j){
+        if (!res.ok){ var e=new Error(j.detail || ('请求失败（'+res.status+'）')); e.status=res.status; throw e; }
+        return j;
+      });
+    });
+}
+function postJSON(path, body, method){ return call(path,{method:method||'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); }
+function gate(msg){ $('view').innerHTML='<div class="card gate"><b>'+esc(msg)+'</b><span class="sub">使用职员端的登录状态</span><a href="/login" target="_top">去登录</a></div>'; }
+
+// ================= 数据 =================
+var S={}, NAMES={a:'A',b:'B'}, ME={role:'',manager:false,name:''}, STAFF=[], TODAY=ymd(new Date()), R={}, LOADED={};
+function loadMonth(ym){
+  return call('/duty/state/?month='+ym).then(function(p){
+    S=p.config||{}; NAMES=p.names||NAMES; ME=p.me||ME; TODAY=p.today||TODAY; if (p.staff) STAFF=p.staff;
+    Object.keys(R).forEach(function(k){ if (k.indexOf(ym)===0) delete R[k]; });
+    Object.keys(p.records||{}).forEach(function(k){ R[k]=p.records[k]; });
+    LOADED[ym]=true;
+    $('meLabel').innerHTML = '我：<b>'+esc(ME.name)+'</b>'+(ME.role?'（'+ME.role.toUpperCase()+'）':'')+(ME.manager?' · 管理':'');
+  });
+}
+function ymOf(d){ return ymd(d).slice(0,7); }
+function nameOf(k){ return k==='a'?NAMES.a : k==='b'?NAMES.b : ''; }
+function other(k){ return k==='a'?'b':'a'; }
+
+// ================= 规则（和后端 catalog/duty.py 一样） =================
+var TASKDEF = {
+  sell:  {name:'销卡', ic:'💳', cls:'c-sell'},
+  stock: {name:'增加成品号库存', ic:'📦', cls:'c-stock'},
+  clean: {name:'清理卡片 + 通知充值', ic:'🧹', cls:'c-clean'},
+  unbind:{name:'解绑卡片', ic:'🔓', cls:'c-unbind'}
+};
+function sellWho(date){ var n=dayDiff(parse(date), parse(S.rotStart)); return ((n%2)+2)%2===0 ? S.rotFirst : other(S.rotFirst); }
+function stockTarget(date){
+  var ov=(S.stockOverride||{})[date]; if (ov!=null && ov!=='') return +ov;
+  var d=parse(date), n=dim(d.getFullYear(), d.getMonth());
+  return Math.round(S.stockStart + (S.stockEnd-S.stockStart)*(d.getDate()-1)/(n-1));
+}
+function unbindPlan(ym){ var p=(S.unbindPlan||{})[ym]; return (p && p.date) ? p : {date: ym+'-'+pad(S.unbindDefaultDay||2), who:S.unbindDefaultWho||'a'}; }
+function tasksOn(date){
+  var d=parse(date), out=[], sw=sellWho(date), ym=date.slice(0,7);
+  out.push({k:'sell', who:sw});
+  out.push({k:'stock', who: S.stockMode==='same'?sw:other(sw), target:stockTarget(date)});
+  if (d.getDate()===dim(d.getFullYear(),d.getMonth())) out.push({k:'clean', who: S.endWho==='sell'?sw:S.endWho});
+  var up=unbindPlan(ym); if (up.date===date) out.push({k:'unbind', who:up.who});
+  out.forEach(function(t){ t.date=date; t.id=date+'|'+t.k; });
+  return out;
+}
+function statusOf(t){
+  var r=R[t.id];
+  if (r){ if (t.k==='stock' && (r.data.stock||0) < t.target) return 'short'; return 'done'; }
+  if (t.date<TODAY) return 'miss';
+  if (t.date===TODAY) return 'todo';
+  return 'plan';
+}
+var STL={done:'已完成', short:'数量不够', todo:'待完成', miss:'漏做', plan:'未开始'};
+var STP={done:'p-done', short:'p-short', todo:'p-todo', miss:'p-miss', plan:'p-plan'};
+
+// ================= 权限 =================
+var st={tab:'today', month:new Date(), day:null};
+function isBoss(){ return !!ME.manager; }
+// 只能当天打卡、当天修改；过了当天就锁定，漏了不能补（后端也会拦）
+function canDo(t){ return t.date===TODAY && (ME.role===t.who || isBoss()); }
+function whoHtml(k){ return '<span class="who'+(k && k===ME.role?' me':'')+'">'+esc(nameOf(k))+'</span>'; }
+function doerHtml(r, t){ return '<span class="who'+(r.by && r.by===ME.role?' me':'')+'">'+esc(r.by_name||'')+'</span>'+(r.by_manager?'（替 '+esc(nameOf(t.who))+' 打卡）':''); }
+
+// ================= 今天 =================
+function taskCard(t){
+  var def=TASKDEF[t.k], s=statusOf(t), r=R[t.id];
+  var h='<div class="card task '+def.cls+(s==='miss'?' miss':'')+'">'
+    + '<div class="hd"><span class="ic">'+def.ic+'</span><span class="nm">'+def.name+'</span><span class="spacer"></span><span class="pill '+STP[s]+'">'+(s==='done'&&r.confirmed?'✓ 老板已确认':STL[s])+'</span></div>'
+    + '<div class="who-line">负责人：'+whoHtml(t.who)+'</div>';
+  if (t.k==='stock') h += '<div class="target">今天库存要补到 <b>'+t.target+'</b> 个</div>';
+  if (t.k==='clean') h += '<div class="sub">两步都要做：① 清理卡片　② 通知充值</div>';
+  if (r){
+    var d=r.data||{}, bits=[];
+    if (t.k==='sell' && d.qty!=null) bits.push('销卡 <b>'+esc(d.qty)+'</b> 张');
+    if (t.k==='stock'){ bits.push('库存补到 <b>'+esc(d.stock)+'</b> 个'+((d.stock||0)<t.target?' <span style="color:var(--red)">（还差 '+(t.target-(d.stock||0))+'）</span>':' ✓')); if (d.qty) bits.push('本次新增 '+esc(d.qty)+' 个'); }
+    if (t.k==='clean') bits.push((d.checks&&d.checks.clean?'✓':'✗')+' 清理卡片　'+(d.checks&&d.checks.notify?'✓':'✗')+' 通知充值');
+    if (t.k==='unbind' && d.qty!=null) bits.push('解绑 <b>'+esc(d.qty)+'</b> 张');
+    h += '<div class="fb"><div class="row">✅ '+doerHtml(r,t)+' 在 <span class="mono">'+md(t.date)+' '+hm(r.at)+'</span> 打卡'+(r.edited_at?' <span class="sub">（'+hm(r.edited_at)+' 改过）</span>':'')+'</div>'
+      + (bits.length?'<div>'+bits.join('　·　')+'</div>':'')
+      + (d.note?'<div>备注：'+esc(d.note)+'</div>':'')
+      + (r.img?'<div class="row"><img src="'+esc(r.img)+'" alt="打卡截图" data-zoom></div>':'')
+      + (r.confirmed?'<div class="sub">'+esc(r.confirm_name)+' 已确认 · '+md(ymd(new Date(r.confirm_at)))+' '+hm(r.confirm_at)+'</div>':'')
+      + '</div>';
+  }
+  h += '<div class="acts">';
+  if (!r && s==='miss') h += '<span class="sub" style="color:var(--red)">🔒 已过当天，不能补打卡，记为漏做</span>';
+  else if (!r && s==='todo') h += canDo(t) ? '<button class="btn primary big" data-do="'+t.id+'">✓ 做完了，打卡</button>' : '<span class="sub">等 '+esc(nameOf(t.who))+' 打卡</span>';
+  else if (!r && s==='plan') h += '<span class="sub">还没到这一天</span>';
+  if (r && canDo(t)) h += '<button class="btn sm" data-do="'+t.id+'">修改（当天内可改）</button>';
+  if (r && t.date<TODAY) h += '<span class="sub">🔒 已锁定</span>';
+  if (r && isBoss()) h += r.confirmed ? '<button class="btn sm" data-unconfirm="'+t.id+'">撤销确认</button>' : '<button class="btn sm gold" data-confirm="'+t.id+'">确认无误</button>';
+  return h+'</div></div>';
+}
+function monthMisses(){
+  var now=parse(TODAY), out=[];
+  for (var d=new Date(now.getFullYear(),now.getMonth(),1); ymd(d)<TODAY; d=addDays(d,1)) tasksOn(ymd(d)).forEach(function(t){ var s=statusOf(t); if (s==='miss'||s==='short') out.push(t); });
+  return out;
+}
+function feed(limit, ym){
+  var list=Object.keys(R).filter(function(id){ return !ym || id.indexOf(ym)===0; }).map(function(id){ var p=id.split('|'); return {id:id, date:p[0], k:p[1], r:R[id]}; })
+    .sort(function(a,b){ return b.r.at-a.r.at; }).slice(0,limit);
+  return list.map(function(x){
+    var d=x.r.data||{}, extra='';
+    if (x.k==='sell' && d.qty!=null) extra=' · '+d.qty+' 张';
+    if (x.k==='stock') extra=' · 库存补到 '+d.stock+' 个（目标 '+stockTarget(x.date)+'）';
+    if (x.k==='unbind' && d.qty!=null) extra=' · '+d.qty+' 张';
+    return '<div class="fi"><span class="tm">'+md(x.date).split(' ')[0]+' '+hm(x.r.at)+'</span><div style="flex:1">'+doerHtml(x.r,{who:''}).replace('（替  打卡）','（代打）')+' 完成 <b>'+TASKDEF[x.k].name+'</b>'+esc(extra)+(d.note?'<div class="sub">'+esc(d.note)+'</div>':'')+'</div>'
+      + (x.r.img?'<img src="'+esc(x.r.img)+'" alt="截图" data-zoom>':'') + (x.r.confirmed?'<span class="pill p-ok2">已确认</span>':'') + '</div>';
+  }).join('') || '<div class="sub">还没有打卡记录</div>';
+}
+function setupBanner(){
+  if (S.a_user && S.b_user) return '';
+  return '<div class="banner">⚙ 还没设置 A 和 B 分别是谁，排班会显示「未设置」。'+(isBoss()?'<button class="btn sm primary" data-tab="settings">去设置</button>':'请让老板在「设置」里选好。')+'</div>';
+}
+function renderToday(){
+  var list=tasksOn(TODAY), done=list.filter(function(t){ return R[t.id]; }).length, pct=Math.round(done*100/list.length);
+  var mine=list.filter(function(t){ return t.who===ME.role; });
+  var sub = ME.role ? '你今天要做 '+mine.length+' 件'+(mine.length?'：'+mine.map(function(t){ return TASKDEF[t.k].name; }).join('、'):'')
+                    : '今天 '+esc(NAMES.a)+' 和 '+esc(NAMES.b)+' 的事，已完成 '+done+' 件';
+  var h=setupBanner()+'<div class="card hero"><div class="ring" style="--p:'+pct+'"><b>'+done+'/'+list.length+'</b></div><div><div class="t">'+md(TODAY)+' · 今天</div><div class="sub">'+sub+'</div></div></div>';
+  var miss=monthMisses();
+  if (miss.length) h += '<div class="alert"><div><b>⚠ 本月有 '+miss.length+' 件漏做或数量不够</b>（已锁定，不能补，会计入统计）</div>'
+    + miss.map(function(t){ return '<div class="row">'+md(t.date)+' · '+TASKDEF[t.k].name+' · '+esc(nameOf(t.who))+' <span class="pill '+STP[statusOf(t)]+'">'+STL[statusOf(t)]+'</span></div>'; }).join('') + '</div>';
+  var dd=parse(TODAY);
+  if (dd.getDate()<=3){ var up=unbindPlan(TODAY.slice(0,7)); if (up.date!==TODAY && !R[up.date+'|unbind']) h += '<div class="card" style="padding:12px 14px;font-size:14px">🔓 本月解绑卡片安排在 <b>'+md(up.date)+'</b>，由 '+whoHtml(up.who)+' 负责</div>'; }
+  h += '<div class="tasks">'+list.map(taskCard).join('')+'</div>';
+  h += '<section class="card feed"><h2>本月打卡动态</h2>'+feed(8, TODAY.slice(0,7))+'</section>';
+  $('view').innerHTML=h;
+}
+
+// ================= 本月 =================
+function chip(t){
+  var s=statusOf(t), def=TASKDEF[t.k];
+  var mark = s==='short' ? '差'+(t.target-(R[t.id].data.stock||0)) : ({done:'✓',todo:'待',miss:'漏',plan:''}[s] || '');
+  var label = {sell:'销卡', stock:'库存 '+t.target, clean:'清理+通知', unbind:'解绑'}[t.k];
+  return '<div class="chip '+def.cls+' '+s+'" title="'+esc(def.name+' · '+nameOf(t.who)+' · '+STL[s])+'">'+label+' · '+esc(nameOf(t.who))+'<span class="st">'+mark+'</span></div>';
+}
+function monthHead(extra){
+  var y=st.month.getFullYear(), m=st.month.getMonth();
+  return '<div class="mhead"><button class="btn" data-mnav="-1" aria-label="上个月">‹</button><span class="ml">'+y+'年'+(m+1)+'月</span><button class="btn" data-mnav="1" aria-label="下个月">›</button><button class="btn sm" data-mnav="0">回到本月</button><span class="spacer"></span>'+(extra||'')+'</div>';
+}
+function renderMonth(){
+  var y=st.month.getFullYear(), m=st.month.getMonth(), n=dim(y,m), lead=(new Date(y,m,1).getDay()+6)%7;
+  var h='<section class="card">'+monthHead('<span class="sub">点某一天看详情；过去的日子已锁定，漏了不能补</span>');
+  h += '<div class="mgrid">'+['周一','周二','周三','周四','周五','周六','周日'].map(function(w){ return '<div class="wd">'+w+'</div>'; }).join('');
+  for (var i=0;i<lead;i++) h+='<div class="day out"></div>';
+  var lst='';
+  for (var d=1; d<=n; d++){
+    var ds=y+'-'+pad(m+1)+'-'+pad(d), ts=tasksOn(ds);
+    h += '<div class="day'+(ds===TODAY?' today':'')+'" data-day="'+ds+'"><div class="dn">'+d+(ds===TODAY?'<span class="tg">今天</span>':'')+'</div>'+ts.map(chip).join('')+'</div>';
+    lst += '<div class="lrow'+(ds===TODAY?' today':'')+'" data-day="'+ds+'"><div class="ld">'+(m+1)+'/'+d+'<small>'+WD[parse(ds).getDay()]+'</small></div><div class="lc">'+ts.map(chip).join('')+'</div></div>';
+  }
+  var tail=(7-((lead+n)%7))%7; for (var j=0;j<tail;j++) h+='<div class="day out"></div>';
+  h += '</div><div class="mlist">'+lst+'</div>';
+  h += '<div class="legend"><span>✓ 已完成</span><span style="color:var(--amber)">待 今天还没做</span><span style="color:var(--red)">漏 过了日期没做</span><span style="color:var(--amber)">差N 库存没补够</span><span>不带标记 = 还没到</span></div></section>';
+  $('view').innerHTML=h;
+}
+function openDay(ds){
+  st.day=ds;
+  openModal(md(ds)+(ds===TODAY?' · 今天':''), '<div class="tasks" style="grid-template-columns:1fr">'+tasksOn(ds).map(taskCard).join('')+'</div>', '<span class="spacer"></span><button class="btn" data-close>关闭</button>');
+}
+
+// ================= 统计 =================
+function renderStats(){
+  var y=st.month.getFullYear(), m=st.month.getMonth(), n=dim(y,m);
+  var P={a:{due:0,done:0,miss:0,short:0,stock:0,sell:0}, b:{due:0,done:0,miss:0,short:0,stock:0,sell:0}}, rows='';
+  for (var d=1; d<=n; d++){
+    var ds=y+'-'+pad(m+1)+'-'+pad(d);
+    tasksOn(ds).forEach(function(t){
+      var p=P[t.who]; if (!p) return; var s=statusOf(t), r=R[t.id];
+      if (s==='plan' || s==='todo') return;
+      p.due++; if (r) p.done++; if (s==='miss') p.miss++; if (s==='short') p.short++;
+      if (t.k==='stock' && r) p.stock += +r.data.qty||0;
+      if (t.k==='sell' && r) p.sell += +r.data.qty||0;
+    });
+    var tk=tasksOn(ds).filter(function(t){ return t.k==='stock'; })[0], r2=R[tk.id];
+    rows += '<tr><td>'+(m+1)+'/'+d+' '+WD[parse(ds).getDay()]+'</td><td>'+esc(nameOf(tk.who))+'</td><td class="n">'+tk.target+'</td><td class="n">'+(r2?esc(r2.data.stock):'')+'</td><td class="n">'+(r2&&r2.data.qty?esc(r2.data.qty):'')+'</td><td>'+(ds>TODAY?'':'<span class="pill '+STP[statusOf(tk)]+'">'+STL[statusOf(tk)]+'</span>')+'</td></tr>';
+  }
+  function pc(k){
+    var p=P[k], rate=p.due?Math.round(p.done*100/p.due):0;
+    return '<div class="card pcard"><div class="dayhead"><h2>'+esc(nameOf(k))+'</h2><span class="sub">'+k.toUpperCase()+'</span><span class="spacer"></span><span class="pill '+(p.miss?'p-miss':'p-done')+'">'+(p.miss?'漏做 '+p.miss+' 次':'没有漏做')+'</span></div>'
+      + '<div><span class="big">'+rate+'%</span> <span class="sub">完成率（不含今天）</span></div><div class="bar2"><i style="width:'+rate+'%"></i></div>'
+      + '<div class="kv"><span>应做</span><span>'+p.due+' 件</span><span>已完成</span><span>'+p.done+' 件</span><span>漏做</span><span>'+p.miss+' 件</span><span>库存没补够</span><span>'+p.short+' 次</span>'
+      + '<span>销卡合计</span><span>'+p.sell+' 张</span><span>新增成品号合计</span><span>'+p.stock+' 个</span></div></div>';
+  }
+  $('view').innerHTML='<section class="card">'+monthHead()+'</section><div class="stats">'+pc('a')+pc('b')+'</div>'
+    + '<section class="card pcard"><h2>每日库存：目标 vs 实际</h2><div class="stkwrap"><table class="stk"><thead><tr><th>日期</th><th>负责人</th><th class="n">目标库存</th><th class="n">实际库存</th><th class="n">本次新增</th><th>状态</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'
+    + '<section class="card feed"><h2>'+(m+1)+'月全部打卡记录</h2>'+feed(200, y+'-'+pad(m+1))+'</section>';
+}
+
+// ================= 设置（老板 / CEO 可改） =================
+function personSelect(id, cur){
+  var opts=STAFF.length ? STAFF : [{id:S.a_user,name:NAMES.a},{id:S.b_user,name:NAMES.b}].filter(function(x){ return x.id; });
+  return '<select id="'+id+'"'+(isBoss()?'':' disabled')+'><option value="">— 选一个人 —</option>'+opts.map(function(u){ return '<option value="'+u.id+'"'+(u.id===cur?' selected':'')+'>'+esc(u.name)+'</option>'; }).join('')+'</select>';
+}
+function renderSettings(){
+  var can=isBoss(), dis=can?'':' disabled';
+  var y=st.month.getFullYear(), m=st.month.getMonth(), n=dim(y,m), ym=y+'-'+pad(m+1), up=unbindPlan(ym), ov='';
+  for (var d=1; d<=n; d++){ var ds=ym+'-'+pad(d), has=(S.stockOverride||{})[ds]!=null; ov += '<label>'+(m+1)+'/'+d+'<input type="number" min="0" data-ovr="'+ds+'" data-shown="'+stockTarget(ds)+'" data-had="'+(has?1:0)+'" value="'+stockTarget(ds)+'" class="'+(has?'changed':'')+'"'+dis+'></label>'; }
+  $('view').innerHTML='<section class="card">'+monthHead('<span class="sub">每天的库存数量和解绑日期按月设置</span>')+'</section><section class="card set">'
+    + (can?'':'<div class="lock">🔒 只有老板 / CEO 可以改规则，你可以看但不能改。</div>')
+    + '<div class="fld"><label>两个人（从职员账号里选）</label><div class="row">A '+personSelect('sA',S.a_user)+'　B '+personSelect('sB',S.b_user)+'</div></div>'
+    + '<div class="fld"><label>销卡轮流</label><div class="row">从 <input type="date" id="sRot" value="'+esc(S.rotStart)+'"'+dis+'> 这天由 <select id="sFirst"'+dis+'><option value="a"'+(S.rotFirst==='a'?' selected':'')+'>'+esc(NAMES.a)+'（A）</option><option value="b"'+(S.rotFirst==='b'?' selected':'')+'>'+esc(NAMES.b)+'（B）</option></select> 开始，之后一人一天</div></div>'
+    + '<div class="fld"><label>补库存的人</label><div class="row"><select id="sMode"'+dis+'><option value="other"'+(S.stockMode==='other'?' selected':'')+'>和销卡错开（今天 A 销卡，就 B 补库存）</option><option value="same"'+(S.stockMode==='same'?' selected':'')+'>和销卡同一个人</option></select></div></div>'
+    + '<div class="fld"><label>库存数量：月初 → 月底，中间自动递增</label><div class="row">1 号 <input type="number" id="sS" value="'+S.stockStart+'"'+dis+'> 个 → 最后一天 <input type="number" id="sE" value="'+S.stockEnd+'"'+dis+'> 个</div>'
+    + '<div class="sub">'+y+'年'+(m+1)+'月每天的数量（可以单独改某一天，改过的是金色；清空就恢复自动）'+(can?' <button class="btn sm" id="ovrReset">本月全部恢复自动</button>':'')+'</div><div class="ovr">'+ov+'</div></div>'
+    + '<div class="fld"><label>月底最后一天：清理卡片 + 通知充值，由谁做</label><div class="row"><select id="sEnd"'+dis+'><option value="sell"'+(S.endWho==='sell'?' selected':'')+'>当天销卡的人</option><option value="a"'+(S.endWho==='a'?' selected':'')+'>'+esc(NAMES.a)+'</option><option value="b"'+(S.endWho==='b'?' selected':'')+'>'+esc(NAMES.b)+'</option></select></div></div>'
+    + '<div class="fld"><label>'+(m+1)+'月 解绑卡片（1–3 号选一天）</label><div class="row">'
+    + [1,2,3].map(function(dd){ var ds=ym+'-'+pad(dd); return '<button class="btn sm'+((st.ubDate||up.date)===ds?' primary':'')+'" data-ub="'+ds+'"'+dis+'>'+(m+1)+'月'+dd+'号</button>'; }).join('')
+    + ' 由 <select id="sUbWho"'+dis+'><option value="a"'+(up.who==='a'?' selected':'')+'>'+esc(NAMES.a)+'</option><option value="b"'+(up.who==='b'?' selected':'')+'>'+esc(NAMES.b)+'</option></select> 负责</div></div>'
+    + (can?'<div class="row" style="display:flex;gap:8px;align-items:center"><button class="btn primary" id="sSave">保存设置</button><span class="sub">改了轮流规则，过去的记录不受影响</span></div>':'')
+    + '</section>';
+}
+function saveSettings(resetOvr){
+  var ym=ymd(st.month).slice(0,7), up=unbindPlan(ym), ovr=Object.assign({}, S.stockOverride||{}), plans=Object.assign({}, S.unbindPlan||{});
+  var start=+$('sS').value||0, end=+$('sE').value||0;
+  if (resetOvr) Object.keys(ovr).forEach(function(k){ if (k.indexOf(ym)===0) delete ovr[k]; });
+  else document.querySelectorAll('[data-ovr]').forEach(function(inp){
+    var ds=inp.dataset.ovr;
+    if (inp.value===''){ delete ovr[ds]; return; }
+    if (inp.value!==inp.dataset.shown) ovr[ds]=+inp.value;
+    else if (inp.dataset.had!=='1') delete ovr[ds];
+  });
+  plans[ym]={date:st.ubDate||up.date, who:$('sUbWho').value};
+  var cfg={a_user:$('sA').value||null, b_user:$('sB').value||null, rotStart:$('sRot').value, rotFirst:$('sFirst').value, stockMode:$('sMode').value,
+           stockStart:start, stockEnd:end, stockOverride:ovr, endWho:$('sEnd').value, unbindPlan:plans};
+  $('sSave').disabled=true;
+  postJSON('/duty/settings/', {config:cfg}, 'PUT').then(function(){ st.ubDate=null; return loadMonth(ym); })
+    .then(function(){ render(); toast(resetOvr?'已恢复自动递增':'设置已保存'); })
+    .catch(function(e){ toast(e.message); if ($('sSave')) $('sSave').disabled=false; });
+}
+
+// ================= 打卡弹窗 =================
+var fx=null;
+function openModal(title, body, foot){ $('mTitle').innerHTML=title; $('mBody').innerHTML=body; $('mFoot').innerHTML=foot; $('mask').classList.remove('hidden'); $('modal').classList.remove('hidden'); }
+function closeModal(){ $('mask').classList.add('hidden'); $('modal').classList.add('hidden'); fx=null; st.day=null; }
+function findTask(id){ var p=id.split('|'); return tasksOn(p[0]).filter(function(t){ return t.k===p[1]; })[0]; }
+function openDo(id){
+  var t=findTask(id), r=R[id], d=(r&&r.data)||{}, def=TASKDEF[t.k], back=st.day;
+  fx={id:id, t:t, img:r?r.img:null, blob:null, removed:false, back:back};
+  var h='<div class="sub">'+md(t.date)+' · 负责人 '+whoHtml(t.who)+(isBoss() && ME.role!==t.who?' · <span style="color:var(--amber)">你是替 '+esc(nameOf(t.who))+' 打卡</span>':'')+'</div>';
+  if (t.k==='sell') h+='<div class="fld"><label>今天销了多少张（可不填）</label><input type="number" min="0" id="fQty" value="'+(d.qty!=null?d.qty:'')+'" inputmode="numeric"></div>';
+  if (t.k==='stock') h+='<div class="fld"><label>补完后库存一共多少个（目标 '+t.target+' 个）</label><input type="number" min="0" id="fStock" value="'+(d.stock!=null?d.stock:'')+'" inputmode="numeric" placeholder="'+t.target+'"></div><div class="fld"><label>这次新增了多少个（可不填）</label><input type="number" min="0" id="fQty" value="'+(d.qty!=null?d.qty:'')+'" inputmode="numeric"></div>';
+  if (t.k==='clean'){ var c=d.checks||{}; h+='<label class="chk'+(c.clean?' on':'')+'"><input type="checkbox" id="fC1"'+(c.clean?' checked':'')+'> ① 已清理卡片</label><label class="chk'+(c.notify?' on':'')+'"><input type="checkbox" id="fC2"'+(c.notify?' checked':'')+'> ② 已通知充值</label>'; }
+  if (t.k==='unbind') h+='<div class="fld"><label>解绑了多少张（可不填）</label><input type="number" min="0" id="fQty" value="'+(d.qty!=null?d.qty:'')+'" inputmode="numeric"></div>';
+  h += '<div class="fld"><label>备注（可不填）</label><textarea id="fNote" placeholder="有问题写在这里">'+esc(d.note||'')+'</textarea></div>'
+    + '<div class="fld"><label>截图（可不传，传了老板能直接看到）</label><div class="upl"><label class="btn sm">📷 选择图片<input type="file" accept="image/*" id="fImg" class="hidden"></label><span id="fPrev">'+(fx.img?'<img src="'+esc(fx.img)+'" alt="截图">':'')+'</span>'+(fx.img?'<button class="btn sm" id="fImgDel">去掉图片</button>':'')+'</div></div>';
+  openModal(def.ic+' '+def.name, h, (r?'<button class="btn" id="fUndo" style="color:var(--red)">撤销打卡</button>':'')+'<span class="spacer"></span><button class="btn" data-close>取消</button><button class="btn primary" id="fSave">'+(r?'保存修改':'确认打卡')+'</button>');
+}
+// 图片先压缩到 1280px 以内再上传，手机拍的照片也不会太大
+function shrink(file, cb){
+  var rd=new FileReader(); rd.onload=function(){ var img=new Image(); img.onload=function(){
+    var k=Math.min(1,1280/Math.max(img.width,img.height)), c=document.createElement('canvas'); c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height); c.toBlob(function(b){ cb(b, URL.createObjectURL(b)); }, 'image/jpeg', .8);
+  }; img.src=rd.result; }; rd.readAsDataURL(file);
+}
+function afterChange(dateStr, msg){
+  var back=fx && fx.back; closeModal();
+  return loadMonth(dateStr.slice(0,7)).then(function(){ render(); if (back) openDay(back); if (msg) toast(msg); });
+}
+function saveDo(){
+  var t=fx.t, data={note:$('fNote').value.trim()};
+  if ($('fQty')) data.qty = $('fQty').value===''?null:+$('fQty').value;
+  if ($('fStock')){ if ($('fStock').value===''){ toast('填一下补完后库存一共多少个'); return; } data.stock=+$('fStock').value; }
+  if (t.k==='clean'){ data.checks={clean:$('fC1').checked, notify:$('fC2').checked}; if (!data.checks.clean || !data.checks.notify){ toast('两步都做完才能打卡'); return; } }
+  var fd=new FormData(); fd.append('date', t.date); fd.append('task', t.k); fd.append('data', JSON.stringify(data));
+  if (fx.blob) fd.append('image', fx.blob, 'shot.jpg');
+  if (fx.removed && !fx.blob) fd.append('remove_image','1');
+  $('fSave').disabled=true; $('fSave').textContent='提交中…';
+  call('/duty/checkin/', {method:'POST', body:fd}).then(function(){
+    return afterChange(t.date, t.k==='stock' && data.stock<t.target ? '已打卡，但库存比目标少 '+(t.target-data.stock)+' 个' : '已打卡 ✓');
+  }).catch(function(e){ toast(e.message); if ($('fSave')){ $('fSave').disabled=false; $('fSave').textContent='确认打卡'; } });
+}
+function act(path, body, msg){
+  var date=body.date;
+  return postJSON(path, body).then(function(){ return afterChange(date, msg); }).catch(function(e){ toast(e.message); });
+}
+
+// ================= 渲染 / 事件 =================
+function render(){
+  document.querySelectorAll('#tabs button').forEach(function(b){ b.classList.toggle('on', b.dataset.tab===st.tab); });
+  ({today:renderToday, month:renderMonth, stats:renderStats, settings:renderSettings})[st.tab]();
+}
+function goMonth(d){
+  st.month=d; var ym=ymOf(d);
+  (LOADED[ym] ? Promise.resolve() : loadMonth(ym)).then(render).catch(function(e){ toast(e.message); });
+}
+document.addEventListener('click', function(e){
+  var z=e.target.closest('[data-zoom]'); if (z){ var lb=document.createElement('div'); lb.className='lightbox'; lb.innerHTML='<img src="'+z.src+'" alt="截图">'; lb.onclick=function(){ lb.remove(); }; document.body.appendChild(lb); return; }
+  var t=e.target.closest('button,[data-day]'); if (!t || t.disabled) return; var d=t.dataset;
+  if (d.tab){ st.tab=d.tab; if (d.tab==='today' && ymOf(st.month)!==TODAY.slice(0,7)) st.month=parse(TODAY); render(); }
+  else if (d.mnav!==undefined){ var n=+d.mnav; goMonth(n===0 ? parse(TODAY) : new Date(st.month.getFullYear(), st.month.getMonth()+n, 1)); }
+  else if (d.day && !t.classList.contains('out')) openDay(d.day);
+  else if (d.do) openDo(d.do);
+  else if (d.confirm){ var p=d.confirm.split('|'); fx={back:st.day}; act('/duty/confirm/', {date:p[0], task:p[1], confirm:true}, '已确认'); }
+  else if (d.unconfirm){ var q=d.unconfirm.split('|'); fx={back:st.day}; act('/duty/confirm/', {date:q[0], task:q[1], confirm:false}, '已撤销确认'); }
+  else if (d.close!==undefined) closeModal();
+  else if (t.id==='fSave') saveDo();
+  else if (t.id==='fUndo'){ if (t._sure){ act('/duty/undo/', {date:fx.t.date, task:fx.t.k}, '已撤销'); } else { t._sure=true; t.textContent='再点一次确认撤销'; } }
+  else if (t.id==='fImgDel'){ fx.blob=null; fx.removed=true; $('fPrev').innerHTML=''; t.remove(); }
+  else if (t.id==='sSave') saveSettings(false);
+  else if (d.ub){ st.ubDate=d.ub; document.querySelectorAll('[data-ub]').forEach(function(b){ b.classList.toggle('primary', b.dataset.ub===d.ub); }); }
+  else if (t.id==='ovrReset') saveSettings(true);
+});
+document.addEventListener('change', function(e){
+  if (e.target.id==='fImg' && e.target.files[0]){ shrink(e.target.files[0], function(blob, url){ fx.blob=blob; fx.removed=false; $('fPrev').innerHTML='<img src="'+url+'" alt="截图">'; }); }
+  if (e.target.id==='fC1' || e.target.id==='fC2') e.target.parentNode.classList.toggle('on', e.target.checked);
+});
+document.addEventListener('keydown', function(e){ if (e.key==='Escape'){ var lb=document.querySelector('.lightbox'); if (lb) lb.remove(); else closeModal(); } });
+$('mask').addEventListener('click', closeModal);
+
+// 启动
+if (!TOKEN) gate('请先登录职员端');
+else loadMonth(ymOf(new Date())).then(function(){ st.month=parse(TODAY); render(); })
+  .catch(function(e){ gate(e.status===401||e===401?'登录已过期，请重新登录':e.status===403?'当前账号没有权限':'加载失败：'+(e.message||e)); });
+// 过了零点（本机时间）自动刷新一次，避免拿昨天的页面打卡；后端也会按服务器日期拦截
+var LOADDAY=ymd(new Date());
+setInterval(function(){ if (ymd(new Date())!==LOADDAY && !fx) location.reload(); }, 60000);
+</script>
+</body>
+</html>
