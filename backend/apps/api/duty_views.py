@@ -235,18 +235,12 @@ class DutyCheckinAPIView(APIView):
 
     @staticmethod
     def _push(task, rec, a, d):
-        User = get_user_model()
-        todays = duty.assignments_for(d)
-        live = [x for x in todays if x.get("user")]
-        done_keys = set(DutyRecord.objects.filter(date=d).values_list("task", "assignee_id"))
-        names = {u.id: _name(u) for u in User.objects.filter(id__in={x["user"] for x in live} | {a.get("cover_for") or 0})}
-        tnames = dict(DutyTask.objects.values_list("key", "name"))
-        remaining = [f"{tnames.get(x['task'], x['task'])} @{names.get(x['user'], '')}" for x in live
-                     if (x["task"], x["user"]) not in done_keys]
+        """推送：事务名、打卡人、时间（不带今日进度）。"""
+        names = {u.id: _name(u) for u in get_user_model().objects.filter(id__in={rec.assignee_id, a.get("cover_for") or 0})}
         md = duty_notify.build_checkin_markdown(
             task=task, rec=rec, doer_name=_name(rec.done_by), assignee_name=names.get(rec.assignee_id) or _name(rec.done_by),
             cover_for_name=names.get(a.get("cover_for"), "") if a.get("cover_for") else "",
-            target=a.get("target"), progress=(len(live) - len(remaining), len(live)), remaining=remaining,
+            target=a.get("target"),
         )
         transaction.on_commit(lambda: duty_notify.push_async(md))
 

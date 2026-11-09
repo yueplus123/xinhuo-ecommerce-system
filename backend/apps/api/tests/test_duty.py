@@ -134,8 +134,8 @@ class DutyApiTests(TestCase):
         self.assertIn("u1", md)
         self.assertIn("还差 3", md)
         self.assertIn("https://staff.example/media/duty/", md)
-        self.assertIn("今日进度：**1/2**", md)
-        self.assertIn("事务B @u3", md)
+        self.assertNotIn("今日进度", md)
+        self.assertNotIn("还剩", md)
         # 清单没勾完不行
         self.assertEqual(self.checkin(self.u3, "B", '{"checks": {"0": true}}').status_code, 400)
         self.assertEqual(self.checkin(self.u3, "B", '{"checks": {"0": true, "1": true}}').status_code, 200)
