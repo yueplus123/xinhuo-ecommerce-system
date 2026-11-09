@@ -222,6 +222,11 @@ table.stk th.n{text-align:right}
 .upc .dd{font-weight:700}
 .upc .dd small{display:block;font-weight:400;color:var(--faint);font-size:12px}
 .upc .its{display:flex;gap:6px;flex-wrap:wrap}
+.stk.rec td{vertical-align:middle}
+.stk.rec .rd{white-space:nowrap;font-weight:700}
+.stk.rec .rd small{font-weight:400;color:var(--faint)}
+.stk.rec tr.cont td{border-top:none}
+.stk.rec tr.is-today td{background:color-mix(in srgb,var(--gold) 12%,var(--card))}
 .day.nopick{cursor:default}
 .day.nopick:hover{background:var(--card)}
 .tag{display:inline-flex;align-items:center;gap:4px;border-radius:6px;padding:3px 8px;font-size:13px;border-left:3px solid var(--c);background:color-mix(in srgb,var(--c) 12%,var(--card))}
@@ -536,11 +541,25 @@ function renderUpcoming(){
   $('view').innerHTML=h+'</div></section>';
 }
 function renderRecords(){
-  var y=st.month.getFullYear(), m=st.month.getMonth(), ym=y+'-'+pad(m+1), rows=[];
-  Object.keys(SCHED).filter(function(d){ return d.slice(0,7)===ym && d<=TODAY; }).sort().reverse().forEach(function(d){ dayItems(d).forEach(function(a){ if (ME.manager || a.user===ME.id) rows.push(a); }); });
-  var done=rows.filter(function(a){ var s=statusOf(a); return s==='done'; }).length, miss=rows.filter(function(a){ return statusOf(a)==='miss'; }).length;
-  var h='<section class="card">'+monthHead('<span class="sub">完成 '+done+' 件 · 漏做 '+miss+' 件</span>')+'</section>';
-  h += rows.length ? '<div class="tasks">'+rows.map(card).join('')+'</div>' : '<div class="card empty">这个月还没有记录</div>';
+  // 整个月按日期列出：已打卡 / 漏做 / 今天待打卡 / 以后的安排
+  var y=st.month.getFullYear(), m=st.month.getMonth(), n=dim(y,m), rows='', done=0, miss=0, todo=0, plan=0;
+  for (var d=1; d<=n; d++){
+    var ds=y+'-'+pad(m+1)+'-'+pad(d), its=dayItems(ds).filter(function(a){ return ME.manager || a.user===ME.id; });
+    if (isOff(ds)){ rows += '<tr class="'+(ds===TODAY?'is-today':'')+'"><td class="rd">'+(m+1)+'/'+d+' <small>'+WD[parse(ds).getDay()]+'</small></td><td colspan="3" class="sub">🌴 全员休息</td></tr>'; continue; }
+    if (!its.length) continue;
+    its.forEach(function(a, k){
+      var t=TK[a.task]||{name:a.task,icon:'📌',color:'#888'}, s=statusOf(a), r=R[a.id];
+      if (s==='done'||s==='short') done++; else if (s==='miss') miss++; else if (s==='todo') todo++; else if (s==='plan') plan++;
+      rows += '<tr class="'+(ds===TODAY?'is-today':'')+(k?' cont':'')+'">'
+        + '<td class="rd">'+(k?'':(m+1)+'/'+d+' <small>'+WD[parse(ds).getDay()]+(ds===TODAY?' · 今天':'')+'</small>')+'</td>'
+        + '<td><span class="tag" style="--c:'+esc(t.color)+'">'+esc(t.icon||'')+' '+esc(t.name)+'</span>'+(ME.manager?' <span class="sub">'+esc(uname(a.user))+'</span>':'')+'</td>'
+        + '<td><span class="pill '+STP[s]+'">'+(s==='done'&&r&&r.confirmed?'✓ 已确认':STL[s])+'</span></td>'
+        + '<td class="mono">'+(r?hm(r.at)+(r.by_manager?' <span class="sub">（'+esc(r.by_name)+' 代打）</span>':''):'')+'</td></tr>';
+    });
+  }
+  var h='<section class="card">'+monthHead('<span class="sub">已打卡 '+done+' · 漏做 '+miss+(todo?' · 今天待打卡 '+todo:'')+(plan?' · 还没到 '+plan:'')+'</span>')
+    + (rows ? '<div class="stkwrap" style="max-height:none"><table class="stk rec"><thead><tr><th>日期</th><th>事务</th><th>状态</th><th>打卡时间</th></tr></thead><tbody>'+rows+'</tbody></table></div>' : '<div class="empty">这个月没有分给你的事</div>')
+    + '</section>';
   $('view').innerHTML=h;
 }
 
