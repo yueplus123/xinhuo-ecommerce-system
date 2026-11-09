@@ -175,24 +175,18 @@ class DutyApiTests(TestCase):
         self.assertTrue(r.json()["archived"])
         self.assertFalse(DutyTask.objects.get(pk=self.B.id).is_active)
 
-    def test_leave_flow(self):
-        r = self.c(self.u1).post("/api/duty/leave/", {"start": self.today.isoformat(), "reason": "看病"}, format="json")
-        self.assertEqual(r.json()["status"], "pending")
-        lid = r.json()["id"]
-        self.assertEqual(self.c(self.u2).post(f"/api/duty/leave/{lid}/approve/").status_code, 403)
-        self.c(self.boss).post(f"/api/duty/leave/{lid}/approve/")
+    def test_one_click_checkin_without_fields(self):
+        """一键打卡：事务不要求数量 / 清单 / 截图时，空反馈直接打卡成功。"""
+        DutyTask.objects.update(qty_enabled=False, qty_required=False, target_mode="none", checklist=[], image_mode="none")
+        self.assertEqual(self.checkin(self.u1, "A").status_code, 200)
+        self.assertEqual(self.checkin(self.u3, "B").status_code, 200)
+
+    def test_leave_no_longer_changes_schedule(self):
+        from backend.apps.catalog.models import DutyLeave
+
+        DutyLeave.objects.create(user=self.u1, start_date=self.today, end_date=self.today, status="approved")
         a = [x for x in duty.assignments_for(self.today) if x["task"] == "A"][0]
-        self.assertEqual((a["user"], a["cover_for"]), (self.u2.id, self.u1.id))
-        self.assertEqual(self.checkin(self.u2, "A", '{"qty": 10}').status_code, 200)
-        # 管理者替人登记，直接生效；过去的日子员工不能请
-        r = self.c(self.u3).post("/api/duty/leave/", {"start": (self.today - timedelta(days=1)).isoformat()},
-                                 format="json")
-        self.assertEqual(r.status_code, 400)
-        r = self.c(self.boss).post("/api/duty/leave/", {"start": self.today.isoformat(), "user": self.u3.id},
-                                   format="json")
-        self.assertEqual(r.json()["status"], "approved")
-        b = [x for x in duty.assignments_for(self.today) if x["task"] == "B"][0]
-        self.assertTrue(b["skip"])
+        self.assertEqual(a["user"], self.u1.id)
 
     def test_swap_and_off_day(self):
         tomorrow = (self.today + timedelta(days=1)).isoformat()

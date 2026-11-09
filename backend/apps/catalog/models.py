@@ -1109,7 +1109,7 @@ class DutyTask(models.Model):
     target_end = models.IntegerField(null=True, blank=True, verbose_name="目标（月底）")
     target_overrides = models.JSONField(default=dict, blank=True, verbose_name="某天单独的目标")
     checklist = models.JSONField(default=list, blank=True, verbose_name="清单（都要勾）")
-    image_mode = models.CharField(max_length=10, choices=IMAGE_CHOICES, default=IMAGE_OPTIONAL, verbose_name="截图")
+    image_mode = models.CharField(max_length=10, choices=IMAGE_CHOICES, default=IMAGE_NONE, verbose_name="截图")
     push_wecom = models.BooleanField(default=True, verbose_name="打卡后推送企业微信")
 
     created_at = models.DateTimeField(auto_now_add=True)

@@ -222,6 +222,8 @@ table.stk th.n{text-align:right}
 .upc .dd{font-weight:700}
 .upc .dd small{display:block;font-weight:400;color:var(--faint);font-size:12px}
 .upc .its{display:flex;gap:6px;flex-wrap:wrap}
+.day.nopick{cursor:default}
+.day.nopick:hover{background:var(--card)}
 .tag{display:inline-flex;align-items:center;gap:4px;border-radius:6px;padding:3px 8px;font-size:13px;border-left:3px solid var(--c);background:color-mix(in srgb,var(--c) 12%,var(--card))}
 </style>
 </head>
@@ -234,7 +236,7 @@ table.stk th.n{text-align:right}
     <span class="lab" id="meLabel"></span>
   </section>
   <div id="view"><div class="card" style="padding:40px;text-align:center;color:var(--muted)">加载中…</div></div>
-  <div class="note">只能当天打卡、当天修改；过了当天自动锁定，漏了不能补。</div>
+  <div class="note">点一下就打卡，打错了当天可以撤销；过了当天自动锁定，漏了不能补。</div>
 </div>
 
 <div class="mask hidden" id="mask"></div>
@@ -349,26 +351,23 @@ function card(a){
   var t=TK[a.task]||{name:a.task,icon:'📌',color:'#888'}, s=statusOf(a), r=a.user!=null && R[a.id], mine=a.user===ME.id;
   var h='<div class="card task" style="--c:'+esc(t.color)+'"><div class="hd"><span class="ic">'+esc(t.icon||'📌')+'</span><span class="nm">'+esc(t.name)+'</span><span class="spacer"></span><span class="pill '+STP[s]+'">'+(s==='done'&&r.confirmed?'✓ 已确认':STL[s])+'</span></div>';
   if (ME.manager || !mine) h += '<div class="who-line">负责人：'+(a.user!=null?'<span class="who'+(mine?' me':'')+'">'+esc(uname(a.user))+'</span>':'<span class="sub">无</span>')+'</div>';
-  if (a.cover_for) h += '<div class="note2">🏖 '+esc(uname(a.cover_for))+' 请假'+(a.user!=null?(a.user===ME.id?'，由你代做':'，由 '+esc(uname(a.user))+' 代做'):'，今天这件事不用做')+'</div>';
-  else if (a.swapped) h += '<div class="note2">🔁 调班：原本是 '+esc(uname(a.plan_user))+'</div>';
+  if (a.swapped) h += '<div class="note2">🔁 调班：原本是 '+esc(uname(a.plan_user))+'</div>';
   if (t.description) h += '<div class="tk-desc">'+esc(t.description)+'</div>';
-  if (t.qty_enabled && a.target!=null) h += '<div class="target">'+esc(t.qty_label||'目标')+' <b>'+a.target+'</b> '+esc(t.qty_unit||'')+'</div>';
-  if ((t.checklist||[]).length && !r) h += '<div class="sub">要做：'+t.checklist.map(function(c,i){ return (i+1)+'. '+esc(c); }).join('　')+'</div>';
   if (r){
     var d=r.data||{}, bits=[];
     if (t.qty_enabled && d.qty!=null) bits.push(esc(t.qty_label||'数量')+' <b>'+esc(d.qty)+'</b> '+esc(t.qty_unit||'')+(a.target!=null?(d.qty>=a.target?' ✓':' <span style="color:var(--red)">（还差 '+(a.target-d.qty)+'）</span>'):''));
     if ((t.checklist||[]).length) bits.push(t.checklist.map(function(c,i){ return ((d.checks||{})[String(i)]?'✓ ':'✗ ')+esc(c); }).join('　'));
-    h += '<div class="fb"><div class="row">✅ <span class="who'+(r.by===ME.id?' me':'')+'">'+esc(r.by_name)+'</span>'+(r.by_manager?'（代 '+esc(uname(a.user))+'）':'')+' 在 <span class="mono">'+md(a.date)+' '+hm(r.at)+'</span> 打卡'+(r.edited_at?' <span class="sub">（'+hm(r.edited_at)+' 改过）</span>':'')+'</div>'
+    h += '<div class="fb"><div class="row">✅ 已打卡 · <span class="who'+(r.by===ME.id?' me':'')+'">'+esc(r.by_name)+'</span>'+(r.by_manager?'（代 '+esc(uname(a.user))+'）':'')+' 在 <span class="mono">'+md(a.date)+' '+hm(r.at)+'</span> 打卡'+(r.edited_at?' <span class="sub">（'+hm(r.edited_at)+' 改过）</span>':'')+'</div>'
       + (bits.length?'<div>'+bits.join('　·　')+'</div>':'') + (d.note?'<div>备注：'+esc(d.note)+'</div>':'')
       + (r.img?'<div class="row"><img src="'+esc(r.img)+'" alt="打卡截图" data-zoom></div>':'')
       + (r.confirmed?'<div class="sub">'+esc(r.confirm_name)+' 已确认</div>':'') + '</div>';
   }
   h += '<div class="acts">';
-  if (s==='todo' && canCheck(a)) h += '<button class="btn primary big" data-do="'+esc(a.id)+'">'+(mine?'✓ 打卡':'代 '+esc(uname(a.user))+' 打卡')+'</button>';
+  if (s==='todo' && canCheck(a)) h += '<button class="btn primary big" data-quick="'+esc(a.id)+'">'+(mine?'✓ 打卡':'代 '+esc(uname(a.user))+' 打卡')+'</button>';
   else if (s==='todo') h += '<span class="sub">等 '+esc(uname(a.user))+' 打卡</span>';
   else if (s==='miss') h += '<span class="sub" style="color:var(--red)">🔒 已过当天，不能补打卡</span>';
   else if (s==='plan') h += '<span class="sub">还没到这一天</span>';
-  if (r && canCheck(a) && (r.by===ME.id || mine || ME.manager)) h += '<button class="btn sm" data-do="'+esc(a.id)+'">修改（当天内可改）</button>';
+  if (r && canCheck(a) && (r.by===ME.id || mine || ME.manager)) h += '<button class="btn sm" data-undo="'+esc(a.id)+'">撤销打卡</button>';
   if (r && a.date<TODAY) h += '<span class="sub">🔒 已锁定</span>';
   if (r && ME.manager) h += r.confirmed ? '<button class="btn sm" data-confirm="'+esc(a.id)+'" data-v="0">撤销确认</button>' : '<button class="btn sm gold" data-confirm="'+esc(a.id)+'" data-v="1">确认无误</button>';
   if (ME.manager && !r && a.date>=TODAY && t.assign_mode!=='all' && !a.unassigned){
@@ -389,23 +388,43 @@ function renderToday(){
   var all=dayItems(TODAY), list=ME.manager?all:all.filter(function(a){ return a.user===ME.id; });
   var h='';
   if (ME.manager){
-    var pl=pendingLeaves().length;
-    if (pl) h += '<div class="banner">🏖 有 <b>'+pl+'</b> 条请假等你批准 <button class="btn sm primary" data-tab="leave">去处理</button></div>';
     if (!PUSH) h += '<div class="banner">🔕 企业微信推送还没配置（服务器 .env 里加 DUTY_WECOM_WEBHOOK_URL），现在打卡不会推送。</div>';
     if (!TASKS.length) h += '<div class="banner">还没有任何事务，去「事务管理」新增吧 <button class="btn sm primary" data-tab="manage">去新增</button></div>';
   }
   if (isOff(TODAY)) h += '<div class="card offday">🌴 今天全员休息，不用打卡'+(ME.manager?'<div style="margin-top:10px"><button class="btn sm" data-off="'+TODAY+'">取消全员休息</button></div>':'')+'</div>';
   else {
     var live=list.filter(function(a){ return a.user!=null; }), done=live.filter(function(a){ return R[a.id]; }).length;
-    var myLeave=!ME.manager && LEAVES.some(function(l){ return l.status==='approved' && l.user===ME.id && l.start<=TODAY && l.end>=TODAY; });
-    var sub = ME.manager ? '今天一共 '+live.length+' 件，已完成 '+done+' 件' : (myLeave ? '你今天请假，不用打卡' : live.length ? '你今天有 '+live.length+' 件事，完成 '+done+' 件' : '你今天没有分到事务');
+    var sub = ME.manager ? '今天一共 '+live.length+' 件，已完成 '+done+' 件' : live.length ? '你今天有 '+live.length+' 件事，完成 '+done+' 件' : '你今天没有分到事务';
     h += '<div class="card hero"><div class="ring" style="--p:'+(live.length?Math.round(done*100/live.length):100)+'"><b>'+done+'/'+live.length+'</b></div><div><div class="t">'+md(TODAY)+' · 今天</div><div class="sub">'+sub+'</div></div></div>';
     var miss=monthMisses();
     if (miss.length) h += '<div class="alert"><div><b>⚠ 本月有 '+miss.length+' 件漏做或没达标</b>（已锁定，不能补）</div>'+miss.slice(0,12).map(function(a){ var t=TK[a.task]||{}; return '<div class="row">'+md(a.date)+' · '+esc(t.name||a.task)+(ME.manager?' · '+esc(uname(a.user)):'')+' <span class="pill '+STP[statusOf(a)]+'">'+STL[statusOf(a)]+'</span></div>'; }).join('')+'</div>';
     var show=ME.manager ? list : list.filter(function(a){ return a.user!=null; });
     h += show.length ? '<div class="tasks">'+show.map(card).join('')+'</div>' : '<div class="card empty">'+(ME.manager?'今天没有安排事务':'今天没有分给你的事，休息一下 ☕')+'</div>';
   }
+  if (!ME.manager) h += myCalendar();
   $('view').innerHTML=h;
+}
+
+// ================= 我的安排：日历（员工，在「今天」下面） =================
+function myChip(a){
+  var t=TK[a.task]||{name:a.task,color:'#888',icon:''}, s=statusOf(a), mark={done:'✓',short:'✓',todo:'待',miss:'漏'}[s]||'';
+  return '<div class="chip '+s+'" style="--c:'+esc(t.color)+'" title="'+esc(t.name+' · '+STL[s])+'">'+esc(t.icon||'')+' '+esc(t.name)+'<span class="st">'+mark+'</span></div>';
+}
+function myCalendar(){
+  var y=st.month.getFullYear(), m=st.month.getMonth(), n=dim(y,m), lead=(new Date(y,m,1).getDay()+6)%7, cnt=0;
+  var h='<section class="card"><div class="mhead"><h2>我的安排</h2><button class="btn" data-mnav="-1" aria-label="上个月">‹</button><span class="ml">'+y+'年'+(m+1)+'月</span><button class="btn" data-mnav="1" aria-label="下个月">›</button><button class="btn sm" data-mnav="0">回到本月</button></div>';
+  h += '<div class="mgrid">'+WD1.map(function(w){ return '<div class="wd">'+w+'</div>'; }).join('');
+  for (var i=0;i<lead;i++) h+='<div class="day out"></div>';
+  var lst='';
+  for (var d=1; d<=n; d++){
+    var ds=y+'-'+pad(m+1)+'-'+pad(d), mine=dayItems(ds).filter(function(a){ return a.user===ME.id; }); cnt+=mine.length;
+    var cells=isOff(ds)?'<div class="chip offc">🌴 休息</div>':mine.map(myChip).join('');
+    h += '<div class="day nopick'+(ds===TODAY?' today':'')+'"><div class="dn">'+d+(ds===TODAY?'<span class="tg">今天</span>':'')+'</div>'+cells+'</div>';
+    if (cells) lst += '<div class="lrow'+(ds===TODAY?' today':'')+'"><div class="ld">'+(m+1)+'/'+d+'<small>'+WD[parse(ds).getDay()]+'</small></div><div class="lc">'+cells+'</div></div>';
+  }
+  var tail=(7-((lead+n)%7))%7; for (var j=0;j<tail;j++) h+='<div class="day out"></div>';
+  h += '</div><div class="mlist">'+(lst||'<div class="empty">这个月没有分给你的事</div>')+'</div>';
+  return h+'<div class="legend"><span>✓ 已打卡</span><span style="color:var(--amber)">待 今天还没打卡</span><span style="color:var(--red)">漏 没打卡</span><span>这个月一共 '+cnt+' 件</span></div></section>';
 }
 
 // ================= 本月（管理者） =================
@@ -421,29 +440,29 @@ function renderMonth(){
   for (var i=0;i<lead;i++) h+='<div class="day out"></div>';
   var lst='';
   for (var d=1; d<=n; d++){
-    var ds=y+'-'+pad(m+1)+'-'+pad(d), cells=(isOff(ds)?'<div class="chip offc">🌴 全员休息</div>':leaveChips(ds)+dayItems(ds).map(chip).join(''));
+    var ds=y+'-'+pad(m+1)+'-'+pad(d), cells=(isOff(ds)?'<div class="chip offc">🌴 全员休息</div>':dayItems(ds).map(chip).join(''));
     h += '<div class="day'+(ds===TODAY?' today':'')+'" data-day="'+ds+'"><div class="dn">'+d+(ds===TODAY?'<span class="tg">今天</span>':'')+'</div>'+cells+'</div>';
     lst += '<div class="lrow'+(ds===TODAY?' today':'')+'" data-day="'+ds+'"><div class="ld">'+(m+1)+'/'+d+'<small>'+WD[parse(ds).getDay()]+'</small></div><div class="lc">'+cells+'</div></div>';
   }
   var tail=(7-((lead+n)%7))%7; for (var j=0;j<tail;j++) h+='<div class="day out"></div>';
-  h += '</div><div class="mlist">'+lst+'</div><div class="legend"><span>✓ 已完成</span><span style="color:var(--amber)">待 今天还没打卡</span><span style="color:var(--red)">漏 没做</span><span style="color:var(--amber)">差 没达标</span><span>免 请假不用做</span></div></section>';
+  h += '</div><div class="mlist">'+lst+'</div><div class="legend"><span>✓ 已完成</span><span style="color:var(--amber)">待 今天还没打卡</span><span style="color:var(--red)">漏 没做</span><span style="color:var(--amber)">差 没达标</span></div></section>';
   $('view').innerHTML=h;
 }
 function openDay(ds){
   st.day=ds; var its=dayItems(ds), off=isOff(ds);
-  var body=(leaveChips(ds)?'<div style="display:flex;gap:6px;flex-wrap:wrap">'+leaveChips(ds)+'</div>':'')+(off?'<div class="offday">🌴 这天全员休息，不排任何事，也不算漏做</div>':its.length?'<div class="tasks" style="grid-template-columns:1fr">'+its.map(card).join('')+'</div>':'<div class="empty">这天没有安排事务</div>');
+  var body=(off?'<div class="offday">🌴 这天全员休息，不排任何事，也不算漏做</div>':its.length?'<div class="tasks" style="grid-template-columns:1fr">'+its.map(card).join('')+'</div>':'<div class="empty">这天没有安排事务</div>');
   openModal(md(ds)+(ds===TODAY?' · 今天':''), body, (ME.manager&&ds>=TODAY?'<button class="btn sm" data-off="'+ds+'">'+(off?'取消全员休息':'设为全员休息')+'</button>':'')+'<span class="spacer"></span><button class="btn" data-close>关闭</button>');
 }
 
 // ================= 事务管理（管理者） =================
 function todayWho(t){ return dayItems(TODAY).filter(function(a){ return a.task===t.key; }).map(function(a){ return a.user!=null?uname(a.user):'免'; }); }
 function renderManage(){
-  var h='<section class="card mhead"><h2>事务管理</h2><span class="sub">每件事做什么、多久一次、交给谁、打卡要反馈什么</span><span class="spacer"></span><button class="btn gold" id="newTask">＋ 新增事务</button></section>';
+  var h='<section class="card mhead"><h2>事务管理</h2><span class="sub">每件事做什么、多久一次、交给谁</span><span class="spacer"></span><button class="btn gold" id="newTask">＋ 新增事务</button></section>';
   if (!TASKS.length) h += '<div class="card empty">还没有事务，点「新增事务」开始。</div>';
   h += '<div class="mgr-list">'+TASKS.map(function(t){
     var tw=t.is_active?todayWho(t):[];
     return '<div class="card mrow'+(t.is_active?'':' off')+'" style="--c:'+esc(t.color)+'"><span class="ic">'+esc(t.icon||'📌')+'</span><div><div class="nm">'+esc(t.name)+(t.is_active?'':' <span class="pill p-plan">已停用</span>')+'</div>'
-      + '<div class="meta"><span>🗓 '+esc(freqText(t))+'</span><span>👤 '+esc(assignText(t))+'</span>'+(tw.length?'<span>今天：<b>'+esc(tw.join('、'))+'</b></span>':'')+(t.qty_enabled?'<span>🔢 '+esc(t.qty_label||'数量')+(t.target_mode==='fixed'?' 目标 '+t.target_start:t.target_mode==='ramp'?' 目标 '+t.target_start+'→'+t.target_end:'')+'</span>':'')+((t.checklist||[]).length?'<span>☑ 清单 '+t.checklist.length+' 项</span>':'')+(t.image_mode==='required'?'<span>📷 必须截图</span>':'')+(t.push_wecom?'<span>🔔 推送</span>':'')+'</div></div>'
+      + '<div class="meta"><span>🗓 '+esc(freqText(t))+'</span><span>👤 '+esc(assignText(t))+'</span>'+(tw.length?'<span>今天：<b>'+esc(tw.join('、'))+'</b></span>':'')+(t.push_wecom?'<span>🔔 推送</span>':'')+'</div></div>'
       + '<div class="acts"><button class="btn sm" data-edit="'+t.id+'">编辑</button><button class="btn sm" data-toggle="'+t.id+'">'+(t.is_active?'停用':'启用')+'</button><button class="btn sm danger" data-del="'+t.id+'" style="color:var(--red)">删除</button></div></div>';
   }).join('')+'</div>';
   $('view').innerHTML=h;
@@ -461,10 +480,6 @@ function keepEditor(){
   if (!ED || !$('eName')) return;
   ED.name=$('eName').value; ED.description=$('eDesc').value; ED.start_date=$('eStart').value; ED.end_date=$('eEnd')?($('eEnd').value||null):null;
   if ($('eIntv')) ED.freq_interval=+$('eIntv').value||1;
-  if ($('eQL')){ ED.qty_label=$('eQL').value; ED.qty_unit=$('eQU').value; ED.qty_required=$('eQR').checked; }
-  if ($('eT1')) ED.target_start=$('eT1').value===''?null:+$('eT1').value;
-  if ($('eT2')) ED.target_end=$('eT2').value===''?null:+$('eT2').value;
-  ED.checklist=[].map.call(document.querySelectorAll('[data-cl]'), function(i){ return i.value; });
   ED.push_wecom=$('ePush').checked; ED.is_active=$('eActive').checked;
 }
 function opt(attr, val, cur, label, cls){ return '<button class="opt'+(cls?' '+cls:'')+(cur?' on':'')+'" '+attr+'="'+esc(val)+'">'+label+'</button>'; }
@@ -485,22 +500,11 @@ function renderEditor(){
     + '<div class="row2">点名字添加：'+ppl.map(function(id){ return '<button class="opt" data-addp="'+id+'">＋ '+esc(USERS[id])+'</button>'; }).join('')+'</div>'
     + '<div class="seq">'+((e.assignees||[]).length ? e.assignees.map(function(id,i){ return (i?'<span class="arr">'+(e.assign_mode==='all'?'、':'→')+'</span>':'')+'<span class="p">'+(e.assign_mode==='fixed'&&i===0?'负责人 ':e.assign_mode==='fixed'?'代班 ':'')+esc(uname(id))+'<button data-rmp="'+i+'" aria-label="去掉">×</button></span>'; }).join('') : '<span class="sub">还没选人</span>')+'</div>'
     + '<div class="pv" id="ePrev">预览加载中…</div></div>';
-  h += '<div class="sec"><b>打卡时要反馈什么</b>'
-    + '<label class="toggle"><input type="checkbox" id="eQty"'+(e.qty_enabled?' checked':'')+'> 要填数量</label>';
-  if (e.qty_enabled){
-    h += '<div class="row2">名称 <input type="text" id="eQL" maxlength="30" placeholder="比如：销卡数量" value="'+esc(e.qty_label)+'"> 单位 <input type="text" id="eQU" maxlength="10" style="width:70px" placeholder="张" value="'+esc(e.qty_unit)+'"> <label class="toggle"><input type="checkbox" id="eQR"'+(e.qty_required?' checked':'')+'> 必填</label></div>'
-      + '<div class="row2">目标 '+[['none','没有'],['fixed','固定'],['ramp','月初→月底递增']].map(function(f){ return opt('data-tgt',f[0],e.target_mode===f[0],f[1]); }).join('')+'</div>';
-    if (e.target_mode==='fixed') h += '<div class="row2">每次要达到 <input type="number" id="eT1" value="'+(e.target_start==null?'':e.target_start)+'"> '+esc(e.qty_unit||'')+'，低于目标标黄「没达标」</div>';
-    if (e.target_mode==='ramp') h += '<div class="row2">每月 1 号 <input type="number" id="eT1" value="'+(e.target_start==null?'':e.target_start)+'"> → 最后一天 <input type="number" id="eT2" value="'+(e.target_end==null?'':e.target_end)+'">，中间每天自动递增</div>';
-  }
-  h += '<div class="row2">清单（每项都要勾才能打卡）<button class="btn sm" id="clAdd">＋ 加一项</button></div>'
-    + (e.checklist||[]).map(function(c,i){ return '<div class="cl-item"><input type="text" data-cl="'+i+'" maxlength="40" value="'+esc(c)+'" placeholder="比如：通知充值"><button class="btn sm" data-clrm="'+i+'">删除</button></div>'; }).join('')
-    + '<div class="row2">截图 '+[['none','不需要'],['optional','可选'],['required','必须']].map(function(f){ return opt('data-img',f[0],e.image_mode===f[0],f[1]); }).join('')+'</div></div>';
   h += '<div class="sec"><label class="toggle"><input type="checkbox" id="ePush"'+(e.push_wecom?' checked':'')+'> 打卡后推送到企业微信群</label><label class="toggle"><input type="checkbox" id="eActive"'+(e.is_active?' checked':'')+'> 启用</label></div></div>';
   $('mBody').innerHTML=h;
   preview();
 }
-function edPayload(){ var p=JSON.parse(JSON.stringify(ED)); if (p.freq_type==='once') p.end_date=null; return p; }
+function edPayload(){ var p=JSON.parse(JSON.stringify(ED)); if (p.freq_type==='once') p.end_date=null; p.qty_enabled=false; p.qty_required=false; p.target_mode='none'; p.checklist=[]; p.image_mode='none'; return p; }
 function preview(){
   clearTimeout(pvTimer);
   pvTimer=setTimeout(function(){
@@ -509,7 +513,7 @@ function preview(){
     send('/duty/tasks/preview/', edPayload()).then(function(r){
       var el=$('ePrev'); if (!el) return;
       if (r.detail){ el.innerHTML='⚠ '+esc(r.detail); return; }
-      el.innerHTML = r.items.length ? '接下来 '+r.items.length+' 次：'+r.items.map(function(x){ return md(x.date)+' <b>'+esc(x.user!=null?uname(x.user):'没人')+'</b>'+(x.target!=null?'（目标 '+x.target+'）':''); }).join('，') : '接下来一段时间都不会出现，检查一下频率和日期。';
+      el.innerHTML = r.items.length ? '接下来 '+r.items.length+' 次：'+r.items.map(function(x){ return md(x.date)+' <b>'+esc(x.user!=null?uname(x.user):'没人')+'</b>'; }).join('，') : '接下来一段时间都不会出现，检查一下频率和日期。';
     }).catch(function(e){ var el=$('ePrev'); if (el) el.textContent=e.message; });
   }, 250);
 }
@@ -577,12 +581,11 @@ function renderStats(){
       [p,t].forEach(function(o){ o.due++; if (s==='done'||s==='short') o.done++; if (s==='miss') o.miss++; if (s==='short') o.short++; });
     });
   });
-  var leaveDays={}; LEAVES.filter(function(l){ return l.status==='approved'; }).forEach(function(l){ for (var d=parse(l.start); ymd(d)<=l.end; d.setDate(d.getDate()+1)){ if (ymd(d).slice(0,7)===ym) leaveDays[l.user]=(leaveDays[l.user]||0)+1; } });
   var ids=Object.keys(P).filter(function(x){ return x!=='null'; });
   var h='<section class="card">'+monthHead('<span class="sub">不含今天和以后</span>')+'</section><div class="stats">'+(ids.length?ids.map(function(id){
     var p=P[id], rate=p.due?Math.round(p.done*100/p.due):0;
     return '<div class="card pcard"><div class="dayhead"><h2>'+esc(uname(+id))+'</h2><span class="spacer"></span><span class="pill '+(p.miss?'p-miss':'p-done')+'">'+(p.miss?'漏做 '+p.miss+' 次':'没有漏做')+'</span></div><div><span class="big">'+rate+'%</span> <span class="sub">完成率</span></div><div class="bar2"><i style="width:'+rate+'%"></i></div>'
-      + '<div class="kv"><span>应做</span><span>'+p.due+' 件</span><span>已完成</span><span>'+p.done+' 件</span><span>漏做</span><span>'+p.miss+' 件</span><span>没达标</span><span>'+p.short+' 次</span><span>请假</span><span>'+(leaveDays[id]||0)+' 天</span></div></div>';
+      + '<div class="kv"><span>应做</span><span>'+p.due+' 件</span><span>已完成</span><span>'+p.done+' 件</span><span>漏做</span><span>'+p.miss+' 件</span><span>没达标</span><span>'+p.short+' 次</span></div></div>';
   }).join(''):'<div class="card empty">这个月还没有可统计的记录</div>')+'</div>';
   h += '<section class="card pcard"><h2>按事务</h2><table class="stk"><thead><tr><th>事务</th><th class="n">应做</th><th class="n">完成</th><th class="n">漏做</th><th class="n">没达标</th></tr></thead><tbody>'
     + TASKS.map(function(t){ var o=T[t.key]||{due:0,done:0,miss:0,short:0}; return '<tr><td>'+esc(t.icon)+' '+esc(t.name)+'</td><td class="n">'+o.due+'</td><td class="n">'+o.done+'</td><td class="n">'+o.miss+'</td><td class="n">'+o.short+'</td></tr>'; }).join('')+'</tbody></table></section>';
@@ -612,6 +615,16 @@ function shrink(file, cb){
     c.getContext('2d').drawImage(img,0,0,c.width,c.height); c.toBlob(function(b){ cb(b, URL.createObjectURL(b)); }, 'image/jpeg', .8);
   }; img.src=rd.result; }; rd.readAsDataURL(file);
 }
+function quickCheck(id, btn){
+  var a=findItem(id); if (!a) return;
+  var fd=new FormData(); fd.append('date',a.date); fd.append('task',a.task); fd.append('data','{}'); if (a.user!==ME.id) fd.append('user',a.user);
+  btn.disabled=true; btn.textContent='提交中…';
+  var back=st.day;
+  call('/duty/checkin/', {method:'POST', body:fd}).then(function(){
+    var t=TK[a.task]||{}; return reload(t.push_wecom && PUSH ? '已打卡 ✓ 已通知企业微信群' : '已打卡 ✓');
+  }).then(function(){ if (back) openDay(back); })
+    .catch(function(e){ toast(e.message); btn.disabled=false; btn.textContent='✓ 打卡'; });
+}
 function afterChange(msg){ var back=fx && fx.back; closeModal(); return reload(msg).then(function(){ if (back) openDay(back); }); }
 function saveDo(){
   var a=fx.a, t=fx.t, data={note:$('fNote').value.trim()};
@@ -627,10 +640,9 @@ function saveDo(){
 }
 
 // ================= 渲染 / 事件 =================
-function tabsFor(){ return ME.manager ? [['today','今天'],['month','本月'],['manage','事务管理'],['leave','请假'],['stats','统计']] : [['today','今天'],['upcoming','我的安排'],['records','我的记录'],['leave','请假']]; }
+function tabsFor(){ return ME.manager ? [['today','今天'],['month','本月'],['manage','事务管理'],['stats','统计']] : [['today','今天'],['records','我的记录']]; }
 function renderTabs(){
-  var pl=ME.manager?pendingLeaves().length:0;
-  $('tabs').innerHTML=tabsFor().map(function(x){ return '<button data-tab="'+x[0]+'" class="'+(st.tab===x[0]?'on':'')+'">'+x[1]+(x[0]==='leave'&&pl?'<span class="tbadge">'+pl+'</span>':'')+'</button>'; }).join('');
+  $('tabs').innerHTML=tabsFor().map(function(x){ return '<button data-tab="'+x[0]+'" class="'+(st.tab===x[0]?'on':'')+'">'+x[1]+'</button>'; }).join('');
 }
 function render(){
   if (!tabsFor().some(function(x){ return x[0]===st.tab; })) st.tab='today';
@@ -646,7 +658,9 @@ document.addEventListener('click', function(e){
   if (d.tab){ st.tab=d.tab; if (d.tab==='today') st.month=parse(TODAY); render(); }
   else if (d.mnav!==undefined){ var n=+d.mnav; goMonth(n===0?parse(TODAY):new Date(st.month.getFullYear(), st.month.getMonth()+n, 1)); }
   else if (d.day && !t.classList.contains('out')) openDay(d.day);
-  else if (d.do) openDo(d.do);
+  else if (d.quick) quickCheck(d.quick, t);
+  else if (d.undo){ if (!t._sure){ t._sure=true; t.textContent='再点一次确认撤销'; setTimeout(function(){ if (t.isConnected){ t._sure=false; t.textContent='撤销打卡'; } },3000); return; }
+    var ua=findItem(d.undo); fx={back:st.day}; send('/duty/undo/', {date:ua.date, task:ua.task, user:ua.user}).then(function(){ return afterChange('已撤销打卡'); }).catch(function(e2){ toast(e2.message); }); }
   else if (d.confirm){ var p=d.confirm.split('|'); fx={back:st.day}; send('/duty/confirm/', {date:p[0], task:p[1], user:+p[2], confirm:d.v==='1'}).then(function(){ return afterChange(d.v==='1'?'已确认':'已撤销确认'); }).catch(function(e2){ toast(e2.message); }); }
   else if (d.unswap){ var sw=Object.assign({}, CFG.swaps||{}); delete sw[d.unswap]; patchCfg({swaps:sw}, '已恢复原排班'); }
   else if (d.off){ var offs=(CFG.offDays||[]).slice(), i=offs.indexOf(d.off); if (i>=0) offs.splice(i,1); else offs.push(d.off); patchCfg({offDays:offs}, i>=0?'已取消全员休息':'这天设为全员休息'); }

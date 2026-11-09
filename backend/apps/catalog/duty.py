@@ -15,7 +15,7 @@
 临时调整（DutySettings.config）：
   swaps     'YYYY-MM-DD|task_key' -> user_id   某天某件事改给某人（fixed / rotate 才有效）
   offDays   ['YYYY-MM-DD']                     全员休息，不排任何事，也不算漏做
-请假：DutyLeave 批准后生效。
+请假：已取消（2026-11），排班不再考虑请假。
 """
 
 from __future__ import annotations
@@ -197,11 +197,11 @@ def schedule(first: date, last: date, tasks=None, cfg=None) -> dict:
     """{ 'YYYY-MM-DD': [assignment, ...] }"""
     tasks = active_tasks() if tasks is None else tasks
     cfg = cfg or load_config()
-    leaves = leave_map(first, last)
+    # 请假模块已取消：排班不再看请假记录（DutyLeave 表保留，不影响）
     out = {}
     cur = first
     while cur <= last:
-        out[cur.isoformat()] = assignments_on(cur, tasks, cfg, leaves.get(cur, set()))
+        out[cur.isoformat()] = assignments_on(cur, tasks, cfg, set())
         cur += timedelta(days=1)
     return out
 
