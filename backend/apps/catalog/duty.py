@@ -1,137 +1,214 @@
-"""值班打卡的排班规则（前端 public/duty.html 用同一套算法显示）。
+"""值班打卡的排班引擎：事务（DutyTask）按频率出现，按分配方式落到具体的人。
 
-四件事：
-  sell   销卡：每天，A、B 一人一天轮流
-  stock  增加成品号库存：每天，A、B 轮流（默认和销卡错开）；当天库存目标从月初 stockStart 递增到月底 stockEnd，可按天改
-  clean  清理卡片 + 通知充值：每月最后一天
-  unbind 解绑卡片：每月 1–3 号里选一天
+频率 freq_type：
+  daily     每天
+  weekly    每周几（freq_weekdays：0=周一 … 6=周日）
+  monthly   每月几号（freq_monthdays：1–31，-1 = 每月最后一天）
+  interval  从开始日期起每隔 N 天（freq_interval）
+  once      只做一次（start_date 那天）
 
-临时情况（不改轮流规则）：
-  swaps    单天调班：'YYYY-MM-DD|task' -> 'a'|'b'
-  offDays  全员停做的日期：那天不排任何事，也不算漏做
-  请假     DutyLeave 批准后，请假人那几天的事交给另一个人；两人都请假则这件事当天不做
+分配 assign_mode：
+  fixed     固定 assignees[0]；他请假时由列表里下一个没请假的人代做
+  rotate    按 assignees 顺序每次轮换（同一个人放两次 = 他做得多）；请假时顺延给下一个没请假的人，轮流顺序本身不变
+  all       assignees 里每个人都要做、各自打卡；请假的人当天免做
+
+临时调整（DutySettings.config）：
+  swaps     'YYYY-MM-DD|task_key' -> user_id   某天某件事改给某人（fixed / rotate 才有效）
+  offDays   ['YYYY-MM-DD']                     全员休息，不排任何事，也不算漏做
+请假：DutyLeave 批准后生效。
 """
 
 from __future__ import annotations
 
 import calendar
-from datetime import date
+from datetime import date, timedelta
 
 from django.utils import timezone
 
-from .models import DutyLeave, DutySettings
+from .models import DutyLeave, DutySettings, DutyTask
 
-DEFAULTS = {
-    "a_user": None,  # A 的用户 id
-    "b_user": None,  # B 的用户 id
-    "rotStart": None,  # 'YYYY-MM-DD'：这天由 rotFirst 销卡，之后一人一天
-    "rotFirst": "a",
-    "stockMode": "other",  # other = 和销卡错开；same = 同一个人
-    "stockStart": 200,
-    "stockEnd": 500,
-    "stockOverride": {},  # 'YYYY-MM-DD' -> 数量
-    "endWho": "sell",  # 月底清理：sell = 当天销卡的人；a / b
-    "unbindPlan": {},  # 'YYYY-MM' -> {"date": 'YYYY-MM-DD', "who": 'a'|'b'}
-    "unbindDefaultDay": 2,
-    "unbindDefaultWho": "a",
-    "swaps": {},  # 'YYYY-MM-DD|task' -> 'a'|'b'
-    "offDays": [],  # ['YYYY-MM-DD']
-}
-
-TASK_KEYS = ("sell", "stock", "clean", "unbind")
+DEFAULTS = {"swaps": {}, "offDays": []}
 
 
 def load_config() -> dict:
     obj = DutySettings.objects.order_by("id").first()
     cfg = dict(DEFAULTS)
     if obj and isinstance(obj.config, dict):
-        cfg.update(obj.config)
-    if not cfg.get("rotStart"):
-        today = timezone.localdate()
-        cfg["rotStart"] = date(today.year, today.month, 1).isoformat()
+        cfg["swaps"] = obj.config.get("swaps") or {}
+        cfg["offDays"] = obj.config.get("offDays") or []
     return cfg
 
 
-def _other(k: str) -> str:
-    return "b" if k == "a" else "a"
+def save_config(cfg: dict, user=None) -> None:
+    obj = DutySettings.objects.order_by("id").first() or DutySettings()
+    base = obj.config if isinstance(obj.config, dict) else {}
+    base.update({k: cfg.get(k, DEFAULTS[k]) for k in DEFAULTS})
+    obj.config = base
+    obj.updated_by = user
+    obj.save()
 
 
-def sell_who(d: date, cfg: dict) -> str:
-    start = date.fromisoformat(cfg["rotStart"])
-    n = (d - start).days
-    return cfg.get("rotFirst", "a") if n % 2 == 0 else _other(cfg.get("rotFirst", "a"))
+def _last_day(d: date) -> int:
+    return calendar.monthrange(d.year, d.month)[1]
 
 
-def stock_target(d: date, cfg: dict) -> int:
-    ov = (cfg.get("stockOverride") or {}).get(d.isoformat())
+def occurs(t: DutyTask, d: date) -> bool:
+    if not t.start_date or d < t.start_date or (t.end_date and d > t.end_date):
+        return False
+    ft = t.freq_type
+    if ft == DutyTask.FREQ_DAILY:
+        return True
+    if ft == DutyTask.FREQ_WEEKLY:
+        return d.weekday() in (t.freq_weekdays or [])
+    if ft == DutyTask.FREQ_MONTHLY:
+        days = t.freq_monthdays or []
+        return d.day in days or (-1 in days and d.day == _last_day(d))
+    if ft == DutyTask.FREQ_INTERVAL:
+        n = max(1, int(t.freq_interval or 1))
+        return (d - t.start_date).days % n == 0
+    if ft == DutyTask.FREQ_ONCE:
+        return d == t.start_date
+    return False
+
+
+def occ_index(t: DutyTask, d: date) -> int:
+    """从开始日期到 d（不含）一共出现过几次，用来决定轮到谁。"""
+    if d <= t.start_date:
+        return 0
+    span = (d - t.start_date).days
+    ft = t.freq_type
+    if ft == DutyTask.FREQ_DAILY:
+        return span
+    if ft == DutyTask.FREQ_INTERVAL:
+        n = max(1, int(t.freq_interval or 1))
+        return (span + n - 1) // n
+    if ft == DutyTask.FREQ_WEEKLY:
+        wd = set(t.freq_weekdays or [])
+        full, rest = divmod(span, 7)
+        cnt = full * len(wd)
+        for i in range(rest):
+            if (t.start_date + timedelta(days=full * 7 + i)).weekday() in wd:
+                cnt += 1
+        return cnt
+    if ft == DutyTask.FREQ_MONTHLY:
+        cnt, cur = 0, date(t.start_date.year, t.start_date.month, 1)
+        while cur <= d:
+            last = _last_day(cur)
+            days = {x for x in (t.freq_monthdays or []) if 1 <= x <= last}
+            if -1 in (t.freq_monthdays or []):
+                days.add(last)
+            for x in days:
+                day = date(cur.year, cur.month, x)
+                if t.start_date <= day < d:
+                    cnt += 1
+            cur = date(cur.year + (cur.month == 12), cur.month % 12 + 1, 1)
+        return cnt
+    return 0
+
+
+def target_for(t: DutyTask, d: date):
+    """当天的数量目标；没有目标返回 None。"""
+    ov = (t.target_overrides or {}).get(d.isoformat())
     if ov not in (None, ""):
         return int(ov)
-    n = calendar.monthrange(d.year, d.month)[1]
-    start, end = int(cfg.get("stockStart") or 0), int(cfg.get("stockEnd") or 0)
-    return round(start + (end - start) * (d.day - 1) / (n - 1))
+    if t.target_mode == DutyTask.TARGET_FIXED:
+        return t.target_start
+    if t.target_mode == DutyTask.TARGET_RAMP:
+        n = _last_day(d)
+        a, b = int(t.target_start or 0), int(t.target_end or 0)
+        return round(a + (b - a) * (d.day - 1) / max(1, n - 1))
+    return None
 
 
-def unbind_plan(year: int, month: int, cfg: dict) -> dict:
-    ym = f"{year}-{month:02d}"
-    plan = (cfg.get("unbindPlan") or {}).get(ym)
-    if plan and plan.get("date"):
-        return {"date": plan["date"], "who": plan.get("who") or "a"}
-    day = int(cfg.get("unbindDefaultDay") or 2)
-    return {"date": f"{ym}-{day:02d}", "who": cfg.get("unbindDefaultWho") or "a"}
-
-
-def tasks_on(d: date, cfg: dict, on_leave=frozenset()) -> list[dict]:
-    """返回当天要做的事：[{task, who('a'|'b'|None), target?, swapped?, cover_for?, skip?}]。
-
-    on_leave：当天请假（已批准）的人，'a' / 'b' 的集合。
-    """
-    ds = d.isoformat()
-    if ds in (cfg.get("offDays") or []):
-        return []
-    sw = sell_who(d, cfg)
-    out = [
-        {"task": "sell", "who": sw},
-        {"task": "stock", "who": sw if cfg.get("stockMode") == "same" else _other(sw), "target": stock_target(d, cfg)},
-    ]
-    if d.day == calendar.monthrange(d.year, d.month)[1]:
-        end_who = cfg.get("endWho") or "sell"
-        out.append({"task": "clean", "who": sw if end_who == "sell" else end_who})
-    plan = unbind_plan(d.year, d.month, cfg)
-    if plan["date"] == ds:
-        out.append({"task": "unbind", "who": plan["who"]})
-    swaps = cfg.get("swaps") or {}
-    for t in out:
-        forced = swaps.get(f"{ds}|{t['task']}")
-        if forced in ("a", "b") and forced != t["who"]:
-            t["who"], t["swapped"] = forced, True
-        if t["who"] in on_leave:
-            alt = _other(t["who"])
-            if alt in on_leave:
-                t["cover_for"], t["who"], t["skip"] = t["who"], None, True
-            else:
-                t["cover_for"], t["who"] = t["who"], alt
+def _clean_ids(ids) -> list[int]:
+    out = []
+    for x in ids or []:
+        try:
+            out.append(int(x))
+        except (TypeError, ValueError):
+            continue
     return out
 
 
-def leave_roles_on(d: date, cfg: dict) -> set:
-    """当天已批准请假的人（'a' / 'b'）。"""
-    ids = set(
-        DutyLeave.objects.filter(status=DutyLeave.STATUS_APPROVED, start_date__lte=d, end_date__gte=d)
-        .values_list("user_id", flat=True)
-    )
-    roles = set()
-    if cfg.get("a_user") in ids:
-        roles.add("a")
-    if cfg.get("b_user") in ids:
-        roles.add("b")
-    return roles
+def assignments_on(d: date, tasks, cfg: dict, on_leave: set) -> list[dict]:
+    """当天所有要做的事：[{task, user, plan_user, cover_for?, swapped?, skip?, target}]，一人一条。"""
+    ds = d.isoformat()
+    if ds in (cfg.get("offDays") or []):
+        return []
+    swaps = cfg.get("swaps") or {}
+    out = []
+    for t in tasks:
+        if not t.is_active or not occurs(t, d):
+            continue
+        seq = _clean_ids(t.assignees)
+        if not seq:
+            out.append({"task": t.key, "user": None, "plan_user": None, "skip": True, "unassigned": True,
+                        "target": target_for(t, d)})
+            continue
+        tgt = target_for(t, d)
+        if t.assign_mode == DutyTask.ASSIGN_ALL:
+            for uid in dict.fromkeys(seq):
+                item = {"task": t.key, "user": uid, "plan_user": uid, "target": tgt}
+                if uid in on_leave:
+                    item.update(cover_for=uid, user=None, skip=True)
+                out.append(item)
+            continue
+        idx = occ_index(t, d) % len(seq) if t.assign_mode == DutyTask.ASSIGN_ROTATE else 0
+        plan = seq[idx]
+        item = {"task": t.key, "user": plan, "plan_user": plan, "target": tgt}
+        forced = swaps.get(f"{ds}|{t.key}")
+        try:
+            forced = int(forced) if forced not in (None, "") else None
+        except (TypeError, ValueError):
+            forced = None
+        if forced and forced != plan:
+            item.update(user=forced, swapped=True)
+        if item["user"] in on_leave:
+            orig = item["user"]
+            cover = None
+            for k in range(1, len(seq) + 1):
+                cand = seq[(idx + k) % len(seq)]
+                if cand != orig and cand not in on_leave:
+                    cover = cand
+                    break
+            item.update(cover_for=orig, user=cover)
+            if cover is None:
+                item["skip"] = True
+        out.append(item)
+    return out
 
 
-def tasks_for(d: date, cfg: dict | None = None) -> list[dict]:
-    """按数据库里的请假记录算当天的事。"""
+def leave_map(first: date, last: date) -> dict:
+    """{date: set(user_id)}：这段时间每天已批准请假的人。"""
+    out: dict = {}
+    for lv in DutyLeave.objects.filter(status=DutyLeave.STATUS_APPROVED, start_date__lte=last, end_date__gte=first):
+        cur = max(lv.start_date, first)
+        while cur <= min(lv.end_date, last):
+            out.setdefault(cur, set()).add(lv.user_id)
+            cur += timedelta(days=1)
+    return out
+
+
+def active_tasks():
+    return list(DutyTask.objects.filter(is_active=True).order_by("sort_order", "id"))
+
+
+def schedule(first: date, last: date, tasks=None, cfg=None) -> dict:
+    """{ 'YYYY-MM-DD': [assignment, ...] }"""
+    tasks = active_tasks() if tasks is None else tasks
     cfg = cfg or load_config()
-    return tasks_on(d, cfg, leave_roles_on(d, cfg))
+    leaves = leave_map(first, last)
+    out = {}
+    cur = first
+    while cur <= last:
+        out[cur.isoformat()] = assignments_on(cur, tasks, cfg, leaves.get(cur, set()))
+        cur += timedelta(days=1)
+    return out
 
 
-def user_id_for(who: str, cfg: dict):
-    return cfg.get("a_user") if who == "a" else cfg.get("b_user")
+def assignments_for(d: date) -> list[dict]:
+    return schedule(d, d)[d.isoformat()]
+
+
+def today() -> date:
+    return timezone.localdate()

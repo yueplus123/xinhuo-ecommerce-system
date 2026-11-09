@@ -1054,8 +1054,78 @@ class WechatBotRecord(models.Model):
         return f"{self.table_type} · {self.amount} · {self.external_id}"
 
 
+class DutyTask(models.Model):
+    """值班事务：做什么、多久一次、交给谁、打卡时要反馈什么。排班算法见 catalog/duty.py。"""
+
+    FREQ_DAILY = "daily"
+    FREQ_WEEKLY = "weekly"
+    FREQ_MONTHLY = "monthly"
+    FREQ_INTERVAL = "interval"
+    FREQ_ONCE = "once"
+    FREQ_CHOICES = (
+        (FREQ_DAILY, "每天"),
+        (FREQ_WEEKLY, "每周几"),
+        (FREQ_MONTHLY, "每月几号"),
+        (FREQ_INTERVAL, "每隔 N 天"),
+        (FREQ_ONCE, "只做一次"),
+    )
+    ASSIGN_FIXED = "fixed"
+    ASSIGN_ROTATE = "rotate"
+    ASSIGN_ALL = "all"
+    ASSIGN_CHOICES = ((ASSIGN_FIXED, "固定一个人"), (ASSIGN_ROTATE, "几个人轮流"), (ASSIGN_ALL, "每个人都要做"))
+    TARGET_NONE = "none"
+    TARGET_FIXED = "fixed"
+    TARGET_RAMP = "ramp"
+    TARGET_CHOICES = ((TARGET_NONE, "没有目标"), (TARGET_FIXED, "固定目标"), (TARGET_RAMP, "月初到月底递增"))
+    IMAGE_NONE = "none"
+    IMAGE_OPTIONAL = "optional"
+    IMAGE_REQUIRED = "required"
+    IMAGE_CHOICES = ((IMAGE_NONE, "不需要"), (IMAGE_OPTIONAL, "可选"), (IMAGE_REQUIRED, "必须"))
+
+    key = models.CharField(max_length=32, unique=True, verbose_name="标识")
+    name = models.CharField(max_length=60, verbose_name="事务名称")
+    icon = models.CharField(max_length=8, blank=True, default="📌", verbose_name="图标")
+    color = models.CharField(max_length=9, blank=True, default="#00704A", verbose_name="颜色")
+    description = models.CharField(max_length=500, blank=True, default="", verbose_name="说明")
+    sort_order = models.IntegerField(default=0, verbose_name="排序")
+    is_active = models.BooleanField(default=True, verbose_name="启用")
+
+    freq_type = models.CharField(max_length=16, choices=FREQ_CHOICES, default=FREQ_DAILY, verbose_name="频率")
+    freq_weekdays = models.JSONField(default=list, blank=True, verbose_name="每周几（0=周一）")
+    freq_monthdays = models.JSONField(default=list, blank=True, verbose_name="每月几号（-1=最后一天）")
+    freq_interval = models.PositiveIntegerField(default=1, verbose_name="每隔几天")
+    start_date = models.DateField(verbose_name="开始日期")
+    end_date = models.DateField(null=True, blank=True, verbose_name="结束日期")
+
+    assign_mode = models.CharField(max_length=16, choices=ASSIGN_CHOICES, default=ASSIGN_FIXED, verbose_name="分配方式")
+    assignees = models.JSONField(default=list, blank=True, verbose_name="人员（轮流顺序，可重复）")
+
+    qty_enabled = models.BooleanField(default=False, verbose_name="要填数量")
+    qty_label = models.CharField(max_length=30, blank=True, default="", verbose_name="数量名称")
+    qty_unit = models.CharField(max_length=10, blank=True, default="", verbose_name="单位")
+    qty_required = models.BooleanField(default=False, verbose_name="数量必填")
+    target_mode = models.CharField(max_length=8, choices=TARGET_CHOICES, default=TARGET_NONE, verbose_name="数量目标")
+    target_start = models.IntegerField(null=True, blank=True, verbose_name="目标（月初 / 固定）")
+    target_end = models.IntegerField(null=True, blank=True, verbose_name="目标（月底）")
+    target_overrides = models.JSONField(default=dict, blank=True, verbose_name="某天单独的目标")
+    checklist = models.JSONField(default=list, blank=True, verbose_name="清单（都要勾）")
+    image_mode = models.CharField(max_length=10, choices=IMAGE_CHOICES, default=IMAGE_OPTIONAL, verbose_name="截图")
+    push_wecom = models.BooleanField(default=True, verbose_name="打卡后推送企业微信")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        verbose_name = "值班事务"
+        verbose_name_plural = "值班事务"
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class DutySettings(models.Model):
-    """值班打卡规则（只有一行）：A/B 是谁、轮流起点、库存目标、月底/月初任务安排。具体字段见 catalog/duty.py。"""
+    """值班打卡的临时调整（只有一行）：单天调班 swaps、全员休息 offDays。具体见 catalog/duty.py。"""
 
     config = models.JSONField(default=dict, blank=True, verbose_name="规则")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
@@ -1079,19 +1149,8 @@ class DutySettings(models.Model):
 class DutyRecord(models.Model):
     """值班打卡记录：某天某件事由谁在什么时候完成。只能当天打卡、当天修改。"""
 
-    TASK_SELL = "sell"
-    TASK_STOCK = "stock"
-    TASK_CLEAN = "clean"
-    TASK_UNBIND = "unbind"
-    TASK_CHOICES = (
-        (TASK_SELL, "销卡"),
-        (TASK_STOCK, "增加成品号库存"),
-        (TASK_CLEAN, "清理卡片 + 通知充值"),
-        (TASK_UNBIND, "解绑卡片"),
-    )
-
     date = models.DateField(db_index=True, verbose_name="日期")
-    task = models.CharField(max_length=16, choices=TASK_CHOICES, verbose_name="事项")
+    task = models.CharField(max_length=32, verbose_name="事务标识")  # DutyTask.key
     assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -1127,10 +1186,12 @@ class DutyRecord(models.Model):
         ordering = ["-date", "task"]
         verbose_name = "值班打卡记录"
         verbose_name_plural = "值班打卡记录"
-        constraints = [models.UniqueConstraint(fields=("date", "task"), name="catalog_duty_once_per_day_task")]
+        constraints = [
+            models.UniqueConstraint(fields=("date", "task", "assignee"), name="catalog_duty_once_per_day_task_user")
+        ]
 
     def __str__(self) -> str:
-        return f"{self.date} · {self.get_task_display()}"
+        return f"{self.date} · {self.task}"
 
 
 class DutyLeave(models.Model):
