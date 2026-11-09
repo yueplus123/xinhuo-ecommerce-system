@@ -2,17 +2,19 @@
 
 规则：
   - 只能当天打卡、当天修改/撤销（按 TIME_ZONE 的本地日期），过了当天就锁定，漏了不能补；
-  - 负责人本人可以打卡；老板 / CEO / 超级管理员可以代打、确认、改规则。
+  - 负责人本人可以打卡；老板 / CEO / 超级管理员可以代打、确认、改规则；
+  - 请假：A/B 申请、老板批准；批准后那几天他的事交给另一个人，轮流顺序不变。
 """
 
 from __future__ import annotations
 
 import calendar
 import json
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -20,7 +22,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from backend.apps.catalog import duty
-from backend.apps.catalog.models import DutyRecord, DutySettings
+from backend.apps.catalog.models import DutyLeave, DutyRecord, DutySettings
 from backend.apps.catalog.roles import is_boss, is_ceo
 
 from .views import StaffOnlyPermission
@@ -73,8 +75,24 @@ def _record_json(r: DutyRecord, cfg: dict) -> dict:
     }
 
 
+def _leave_json(lv: DutyLeave, cfg: dict) -> dict:
+    return {
+        "id": lv.id,
+        "who": _role_of(lv.user, cfg),
+        "user_name": _name(lv.user),
+        "start": lv.start_date.isoformat(),
+        "end": lv.end_date.isoformat(),
+        "reason": lv.reason,
+        "status": lv.status,
+        "created_by_name": _name(lv.created_by),
+        "created_at": _ms(lv.created_at),
+        "decided_by_name": _name(lv.decided_by),
+        "decided_at": _ms(lv.decided_at),
+    }
+
+
 def _find_task(d: date, task: str, cfg: dict):
-    for t in duty.tasks_on(d, cfg):
+    for t in duty.tasks_for(d, cfg):
         if t["task"] == task:
             return t
     return None
@@ -118,6 +136,13 @@ class DutyStateAPIView(APIView):
                 "b": _name(users.get(cfg.get("b_user"))) or "B（未设置）",
             },
             "records": {f"{r.date.isoformat()}|{r.task}": _record_json(r, cfg) for r in recs},
+            # 这个月相关的请假，加上所有待批准的（老板在「请假」页处理）
+            "leaves": [
+                _leave_json(lv, cfg)
+                for lv in DutyLeave.objects.filter(
+                    Q(start_date__lte=last, end_date__gte=first - timedelta(days=31)) | Q(status=DutyLeave.STATUS_PENDING)
+                ).select_related("user", "created_by", "decided_by").order_by("-start_date", "-id")[:300]
+            ],
         }
         if manager:
             payload["staff"] = [
@@ -145,6 +170,8 @@ class DutyCheckinAPIView(APIView):
         t = _find_task(d, task, cfg)
         if not t:
             return Response({"detail": "今天没有这件事。"}, status=status.HTTP_400_BAD_REQUEST)
+        if not t.get("who"):
+            return Response({"detail": "今天两个人都请假，这件事不用做。"}, status=status.HTTP_400_BAD_REQUEST)
         assignee_id = duty.user_id_for(t["who"], cfg)
         manager = is_manager(request.user)
         if request.user.id != assignee_id and not manager:
@@ -278,6 +305,13 @@ class DutySettingsAPIView(APIView):
                     if pd and pd.day <= 3 and f"{pd.year}-{pd.month:02d}" == ym:
                         plans[ym] = {"date": pd.isoformat(), "who": p.get("who") if p.get("who") in ("a", "b") else "a"}
                 cfg["unbindPlan"] = plans
+            if isinstance(incoming.get("swaps"), dict):
+                cfg["swaps"] = {
+                    k: v for k, v in incoming["swaps"].items()
+                    if v in ("a", "b") and "|" in k and _parse_day(k.split("|")[0]) and k.split("|")[1] in duty.TASK_KEYS
+                }
+            if isinstance(incoming.get("offDays"), list):
+                cfg["offDays"] = sorted({_parse_day(x).isoformat() for x in incoming["offDays"] if _parse_day(x)})
         except (TypeError, ValueError):
             return Response({"detail": "设置里有数字填得不对"}, status=status.HTTP_400_BAD_REQUEST)
         if cfg.get("a_user") and cfg.get("a_user") == cfg.get("b_user"):
@@ -287,3 +321,82 @@ class DutySettingsAPIView(APIView):
         obj.updated_by = request.user
         obj.save()
         return Response({"config": duty.load_config()})
+
+
+class DutyLeaveAPIView(APIView):
+    """POST {start, end, reason, who?}：申请请假。
+
+    A/B 本人申请 → 待老板批准；老板替 A/B 登记（带 who='a'|'b'）→ 直接生效。
+    """
+
+    permission_classes = [StaffOnlyPermission]
+
+    def post(self, request):
+        cfg = duty.load_config()
+        today = timezone.localdate()
+        start, end = _parse_day(request.data.get("start")), _parse_day(request.data.get("end") or request.data.get("start"))
+        if not start or not end or end < start:
+            return Response({"detail": "请假日期不对"}, status=status.HTTP_400_BAD_REQUEST)
+        if (end - start).days > 60:
+            return Response({"detail": "一次最多请 60 天"}, status=status.HTTP_400_BAD_REQUEST)
+        manager = is_manager(request.user)
+        who = (request.data.get("who") or "").strip()
+        if manager and who in ("a", "b"):
+            uid = duty.user_id_for(who, cfg)
+            if not uid:
+                return Response({"detail": "还没设置这个人"}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            if _role_of(request.user, cfg) not in ("a", "b"):
+                return Response({"detail": "你不在值班名单里"}, status=status.HTTP_403_FORBIDDEN)
+            if start < today:
+                return Response({"detail": "不能给已经过去的日子请假"}, status=status.HTTP_400_BAD_REQUEST)
+            uid = request.user.id
+        overlap = DutyLeave.objects.filter(
+            user_id=uid, status__in=(DutyLeave.STATUS_PENDING, DutyLeave.STATUS_APPROVED),
+            start_date__lte=end, end_date__gte=start,
+        ).exists()
+        if overlap:
+            return Response({"detail": "这段时间已经有请假记录了"}, status=status.HTTP_400_BAD_REQUEST)
+        direct = manager and who in ("a", "b")
+        lv = DutyLeave.objects.create(
+            user_id=uid, start_date=start, end_date=end, reason=str(request.data.get("reason") or "")[:200],
+            status=DutyLeave.STATUS_APPROVED if direct else DutyLeave.STATUS_PENDING,
+            created_by=request.user,
+            decided_by=request.user if direct else None,
+            decided_at=timezone.now() if direct else None,
+        )
+        return Response(_leave_json(lv, cfg), status=status.HTTP_201_CREATED)
+
+
+class DutyLeaveActionAPIView(APIView):
+    """POST /duty/leave/<id>/<action>/：approve / reject（老板），cancel（本人撤销待批准的；老板可撤销任何）。"""
+
+    permission_classes = [StaffOnlyPermission]
+
+    def post(self, request, pk: int, action: str):
+        cfg = duty.load_config()
+        lv = DutyLeave.objects.filter(pk=pk).select_related("user").first()
+        if not lv:
+            return Response({"detail": "找不到这条请假"}, status=status.HTTP_404_NOT_FOUND)
+        manager = is_manager(request.user)
+        if action in ("approve", "reject"):
+            if not manager:
+                return Response({"detail": "只有老板可以批准"}, status=status.HTTP_403_FORBIDDEN)
+            if lv.status != DutyLeave.STATUS_PENDING:
+                return Response({"detail": "这条请假已经处理过了"}, status=status.HTTP_400_BAD_REQUEST)
+            lv.status = DutyLeave.STATUS_APPROVED if action == "approve" else DutyLeave.STATUS_REJECTED
+        elif action == "cancel":
+            if manager:
+                pass
+            elif lv.user_id == request.user.id and lv.status == DutyLeave.STATUS_PENDING:
+                pass
+            else:
+                return Response({"detail": "已批准的请假只能让老板撤销"}, status=status.HTTP_403_FORBIDDEN)
+            if lv.status in (DutyLeave.STATUS_REJECTED, DutyLeave.STATUS_CANCELLED):
+                return Response({"detail": "这条请假已经失效了"}, status=status.HTTP_400_BAD_REQUEST)
+            lv.status = DutyLeave.STATUS_CANCELLED
+        else:
+            return Response({"detail": "未知操作"}, status=status.HTTP_400_BAD_REQUEST)
+        lv.decided_by, lv.decided_at = request.user, timezone.now()
+        lv.save(update_fields=["status", "decided_by", "decided_at"])
+        return Response(_leave_json(lv, cfg))

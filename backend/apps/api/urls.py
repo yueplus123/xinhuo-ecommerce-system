@@ -134,6 +134,8 @@ urlpatterns = [
     path("duty/undo/", duty_views.DutyUndoAPIView.as_view(), name="duty-undo"),
     path("duty/confirm/", duty_views.DutyConfirmAPIView.as_view(), name="duty-confirm"),
     path("duty/settings/", duty_views.DutySettingsAPIView.as_view(), name="duty-settings"),
+    path("duty/leave/", duty_views.DutyLeaveAPIView.as_view(), name="duty-leave"),
+    path("duty/leave/<int:pk>/<str:action>/", duty_views.DutyLeaveActionAPIView.as_view(), name="duty-leave-action"),
     path("", include(router.urls)),
     *manage_catalog.urlpatterns,
     *manage_pools.urlpatterns,

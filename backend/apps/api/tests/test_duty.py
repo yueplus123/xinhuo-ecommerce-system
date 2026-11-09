@@ -108,3 +108,73 @@ class DutyTests(TestCase):
         cfg = duty.load_config()
         self.assertEqual(cfg["stockEnd"], 600)
         self.assertEqual(duty.stock_target(date(2026, 11, 10), cfg), 999)
+
+
+@override_settings(MEDIA_ROOT="/tmp/xh-duty-test-media")
+class DutyLeaveTests(TestCase):
+    def setUp(self):
+        U = get_user_model()
+        self.a = U.objects.create_user("lin", password="x", is_staff=True)
+        self.b = U.objects.create_user("jie", password="x", is_staff=True)
+        self.boss = U.objects.create_user("boss", password="x", is_staff=True)
+        self.boss.groups.add(ensure_boss_group())
+        self.today = timezone.localdate()
+        DutySettings.objects.create(config={"a_user": self.a.id, "b_user": self.b.id, "rotStart": self.today.isoformat(),
+                                            "rotFirst": "a"})
+
+    def c(self, u):
+        c = APIClient()
+        c.force_authenticate(u)
+        return c
+
+    def test_apply_approve_and_cover(self):
+        r = self.c(self.a).post("/api/duty/leave/", {"start": self.today.isoformat(), "end": self.today.isoformat(),
+                                                     "reason": "看病"}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()["status"], "pending")
+        # 没批准之前，今天还是 A 销卡
+        self.assertEqual({t["task"]: t["who"] for t in duty.tasks_for(self.today)}["sell"], "a")
+        lid = r.json()["id"]
+        self.assertEqual(self.c(self.b).post(f"/api/duty/leave/{lid}/approve/").status_code, 403)
+        r = self.c(self.boss).post(f"/api/duty/leave/{lid}/approve/")
+        self.assertEqual(r.json()["status"], "approved")
+        t = {x["task"]: x for x in duty.tasks_for(self.today)}
+        self.assertEqual(t["sell"]["who"], "b")
+        self.assertEqual(t["sell"]["cover_for"], "a")
+        # B 可以打 A 的销卡，A 不行了
+        ok = self.c(self.b).post("/api/duty/checkin/", {"date": self.today.isoformat(), "task": "sell", "data": "{}"},
+                                 format="multipart")
+        self.assertEqual(ok.status_code, 200, ok.content)
+        # 明天轮流照旧（不顺延）：明天本来就是 B 销卡
+        self.assertEqual({x["task"]: x["who"] for x in duty.tasks_for(self.today + timedelta(days=1))}["sell"], "b")
+        st = self.c(self.boss).get("/api/duty/state/").json()
+        self.assertEqual(st["leaves"][0]["who"], "a")
+
+    def test_both_on_leave_skips(self):
+        for u in (self.a, self.b):
+            self.c(self.boss).post("/api/duty/leave/", {"start": self.today.isoformat(), "who": "a" if u == self.a else "b"},
+                                   format="json")
+        t = duty.tasks_for(self.today)
+        self.assertTrue(all(x["who"] is None and x.get("skip") for x in t))
+        r = self.c(self.boss).post("/api/duty/checkin/", {"date": self.today.isoformat(), "task": "sell", "data": "{}"},
+                                   format="multipart")
+        self.assertEqual(r.status_code, 400)
+
+    def test_rules_for_employees(self):
+        y = (self.today - timedelta(days=1)).isoformat()
+        self.assertEqual(self.c(self.a).post("/api/duty/leave/", {"start": y}, format="json").status_code, 400)
+        r = self.c(self.a).post("/api/duty/leave/", {"start": self.today.isoformat()}, format="json")
+        self.assertEqual(self.c(self.a).post("/api/duty/leave/", {"start": self.today.isoformat()}, format="json").status_code,
+                         400)  # 重复
+        lid = r.json()["id"]
+        self.assertEqual(self.c(self.a).post(f"/api/duty/leave/{lid}/cancel/").json()["status"], "cancelled")
+
+    def test_swap_and_off_day(self):
+        tomorrow = (self.today + timedelta(days=1)).isoformat()
+        r = self.c(self.boss).put("/api/duty/settings/", {"config": {"swaps": {f"{self.today.isoformat()}|sell": "b"},
+                                                                     "offDays": [tomorrow]}}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        t = {x["task"]: x for x in duty.tasks_for(self.today)}
+        self.assertEqual(t["sell"]["who"], "b")
+        self.assertTrue(t["sell"]["swapped"])
+        self.assertEqual(duty.tasks_for(self.today + timedelta(days=1)), [])

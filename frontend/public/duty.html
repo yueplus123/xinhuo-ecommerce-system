@@ -159,6 +159,18 @@ table.stk th.n{text-align:right}
 .toast{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);background:rgba(0,0,0,.82);color:#fff;padding:12px 20px;border-radius:10px;z-index:70;font-size:15px;pointer-events:none;max-width:80vw;text-align:center}
 .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:80;display:grid;place-items:center;cursor:zoom-out}
 .lightbox img{max-width:92vw;max-height:88vh;border-radius:8px}
+.tbadge{display:inline-block;margin-left:5px;min-width:18px;height:18px;line-height:18px;border-radius:9px;background:var(--red);color:#fff;font-size:11px;padding:0 5px;font-weight:700}
+.note2{font-size:13px;border-radius:8px;padding:6px 10px;background:var(--blue-soft);color:var(--blue)}
+.lvlist{display:flex;flex-direction:column;gap:8px}
+.lv{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px}
+.lv.pending{border-color:var(--amber);background:var(--amber-soft)}
+.lv .dt{font-weight:700}
+.lvform{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:14px}
+.lvform input,.lvform select{height:38px;border:1px solid var(--line2);border-radius:8px;padding:0 10px;background:var(--card);font-size:14px}
+.lvform input[type=text]{flex:1;min-width:160px}
+.chip.lvc{--c:#3B6EA8}
+.chip.offc{--c:#8A8F8C}
+.offday{padding:24px;text-align:center;font-size:16px}
 .gate{padding:40px 20px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}
 .gate a{color:var(--g);font-weight:600}
 .banner{padding:12px 14px;border-radius:12px;border:1px solid var(--gold);background:var(--gold-soft);font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -172,6 +184,7 @@ table.stk th.n{text-align:right}
     <div class="segc" id="tabs">
       <button data-tab="today" class="on">今天</button>
       <button data-tab="month">本月</button>
+      <button data-tab="leave">请假<span class="tbadge hidden" id="leaveBadge"></span></button>
       <button data-tab="stats">统计</button>
       <button data-tab="settings">设置</button>
     </div>
@@ -242,10 +255,13 @@ function postJSON(path, body, method){ return call(path,{method:method||'POST', 
 function gate(msg){ $('view').innerHTML='<div class="card gate"><b>'+esc(msg)+'</b><span class="sub">使用职员端的登录状态</span><a href="/login" target="_top">去登录</a></div>'; }
 
 // ================= 数据 =================
-var S={}, NAMES={a:'A',b:'B'}, ME={role:'',manager:false,name:''}, STAFF=[], TODAY=ymd(new Date()), R={}, LOADED={};
+var S={}, NAMES={a:'A',b:'B'}, ME={role:'',manager:false,name:''}, STAFF=[], TODAY=ymd(new Date()), R={}, LOADED={}, LEAVES=[];
 function loadMonth(ym){
   return call('/duty/state/?month='+ym).then(function(p){
     S=p.config||{}; NAMES=p.names||NAMES; ME=p.me||ME; TODAY=p.today||TODAY; if (p.staff) STAFF=p.staff;
+    var seen={}; LEAVES=(p.leaves||[]).concat(LEAVES).filter(function(l){ if (seen[l.id]) return false; seen[l.id]=1; return true; });
+    if (p.leaves) p.leaves.forEach(function(l){ for (var i=0;i<LEAVES.length;i++) if (LEAVES[i].id===l.id) LEAVES[i]=l; });
+    updateBadge();
     Object.keys(R).forEach(function(k){ if (k.indexOf(ym)===0) delete R[k]; });
     Object.keys(p.records||{}).forEach(function(k){ R[k]=p.records[k]; });
     LOADED[ym]=true;
@@ -270,24 +286,33 @@ function stockTarget(date){
   return Math.round(S.stockStart + (S.stockEnd-S.stockStart)*(d.getDate()-1)/(n-1));
 }
 function unbindPlan(ym){ var p=(S.unbindPlan||{})[ym]; return (p && p.date) ? p : {date: ym+'-'+pad(S.unbindDefaultDay||2), who:S.unbindDefaultWho||'a'}; }
+// 当天请假（已批准）的人
+function leaveRolesOn(date){ var r={}; LEAVES.forEach(function(l){ if (l.status==='approved' && l.who && l.start<=date && l.end>=date) r[l.who]=l; }); return r; }
+function isOffDay(date){ return (S.offDays||[]).indexOf(date)>=0; }
 function tasksOn(date){
-  var d=parse(date), out=[], sw=sellWho(date), ym=date.slice(0,7);
+  if (isOffDay(date)) return [];
+  var d=parse(date), out=[], sw=sellWho(date), ym=date.slice(0,7), lv=leaveRolesOn(date), swaps=S.swaps||{};
   out.push({k:'sell', who:sw});
   out.push({k:'stock', who: S.stockMode==='same'?sw:other(sw), target:stockTarget(date)});
   if (d.getDate()===dim(d.getFullYear(),d.getMonth())) out.push({k:'clean', who: S.endWho==='sell'?sw:S.endWho});
   var up=unbindPlan(ym); if (up.date===date) out.push({k:'unbind', who:up.who});
-  out.forEach(function(t){ t.date=date; t.id=date+'|'+t.k; });
+  out.forEach(function(t){
+    t.date=date; t.id=date+'|'+t.k; t.plan=t.who;
+    var f=swaps[t.id]; if ((f==='a'||f==='b') && f!==t.who){ t.who=f; t.swapped=true; }
+    if (lv[t.who]){ var alt=other(t.who); if (lv[alt]){ t.coverFor=t.who; t.who=null; t.skip=true; } else { t.coverFor=t.who; t.who=alt; } }
+  });
   return out;
 }
 function statusOf(t){
   var r=R[t.id];
+  if (!r && t.skip) return 'skip';
   if (r){ if (t.k==='stock' && (r.data.stock||0) < t.target) return 'short'; return 'done'; }
   if (t.date<TODAY) return 'miss';
   if (t.date===TODAY) return 'todo';
   return 'plan';
 }
-var STL={done:'已完成', short:'数量不够', todo:'待完成', miss:'漏做', plan:'未开始'};
-var STP={done:'p-done', short:'p-short', todo:'p-todo', miss:'p-miss', plan:'p-plan'};
+var STL={done:'已完成', short:'数量不够', todo:'待完成', miss:'漏做', plan:'未开始', skip:'不用做'};
+var STP={done:'p-done', short:'p-short', todo:'p-todo', miss:'p-miss', plan:'p-plan', skip:'p-plan'};
 
 // ================= 权限 =================
 var st={tab:'today', month:new Date(), day:null};
@@ -302,7 +327,9 @@ function taskCard(t){
   var def=TASKDEF[t.k], s=statusOf(t), r=R[t.id];
   var h='<div class="card task '+def.cls+(s==='miss'?' miss':'')+'">'
     + '<div class="hd"><span class="ic">'+def.ic+'</span><span class="nm">'+def.name+'</span><span class="spacer"></span><span class="pill '+STP[s]+'">'+(s==='done'&&r.confirmed?'✓ 老板已确认':STL[s])+'</span></div>'
-    + '<div class="who-line">负责人：'+whoHtml(t.who)+'</div>';
+    + '<div class="who-line">负责人：'+(t.who?whoHtml(t.who):'<span class="sub">无</span>')+'</div>';
+  if (t.coverFor) h += '<div class="note2">🏖 '+esc(nameOf(t.coverFor))+' 请假'+(t.who?'，由 '+esc(nameOf(t.who))+' 代做':'，另一个人也请假，这件事今天不用做')+'</div>';
+  else if (t.swapped) h += '<div class="note2">🔁 调班：原本是 '+esc(nameOf(t.plan))+'</div>';
   if (t.k==='stock') h += '<div class="target">今天库存要补到 <b>'+t.target+'</b> 个</div>';
   if (t.k==='clean') h += '<div class="sub">两步都要做：① 清理卡片　② 通知充值</div>';
   if (r){
@@ -324,6 +351,11 @@ function taskCard(t){
   else if (!r && s==='plan') h += '<span class="sub">还没到这一天</span>';
   if (r && canDo(t)) h += '<button class="btn sm" data-do="'+t.id+'">修改（当天内可改）</button>';
   if (r && t.date<TODAY) h += '<span class="sub">🔒 已锁定</span>';
+  if (!r && isBoss() && t.date>=TODAY && !t.skip){
+    var alt=other(t.who), back=S.swaps && S.swaps[t.id];
+    if (back) h += '<button class="btn sm" data-swap="'+t.id+'" data-to="">恢复原排班</button>';
+    else if (!leaveRolesOn(t.date)[alt]) h += '<button class="btn sm" data-swap="'+t.id+'" data-to="'+alt+'">改给 '+esc(nameOf(alt))+'</button>';
+  }
   if (r && isBoss()) h += r.confirmed ? '<button class="btn sm" data-unconfirm="'+t.id+'">撤销确认</button>' : '<button class="btn sm gold" data-confirm="'+t.id+'">确认无误</button>';
   return h+'</div></div>';
 }
@@ -344,16 +376,26 @@ function feed(limit, ym){
       + (x.r.img?'<img src="'+esc(x.r.img)+'" alt="截图" data-zoom>':'') + (x.r.confirmed?'<span class="pill p-ok2">已确认</span>':'') + '</div>';
   }).join('') || '<div class="sub">还没有打卡记录</div>';
 }
+function pendingLeaves(){ return LEAVES.filter(function(l){ return l.status==='pending'; }); }
+function updateBadge(){ var n=isBoss()?pendingLeaves().length:0, b=$('leaveBadge'); if (!b) return; b.textContent=n; b.classList.toggle('hidden', !n); }
+function pendingBanner(){
+  var n=pendingLeaves().length; if (!isBoss() || !n) return '';
+  return '<div class="banner">🏖 有 <b>'+n+'</b> 条请假等你批准 <button class="btn sm primary" data-tab="leave">去处理</button></div>';
+}
 function setupBanner(){
   if (S.a_user && S.b_user) return '';
   return '<div class="banner">⚙ 还没设置 A 和 B 分别是谁，排班会显示「未设置」。'+(isBoss()?'<button class="btn sm primary" data-tab="settings">去设置</button>':'请让老板在「设置」里选好。')+'</div>';
 }
 function renderToday(){
-  var list=tasksOn(TODAY), done=list.filter(function(t){ return R[t.id]; }).length, pct=Math.round(done*100/list.length);
+  var list=tasksOn(TODAY);
+  if (!list.length){ $('view').innerHTML=setupBanner()+pendingBanner()+'<div class="card offday">🌴 今天（'+md(TODAY)+'）全员休息，不用打卡'+(isBoss()?'<div style="margin-top:10px"><button class="btn sm" data-off="'+TODAY+'">取消全员休息</button></div>':'')+'</div><section class="card feed"><h2>本月打卡动态</h2>'+feed(8, TODAY.slice(0,7))+'</section>'; return; }
+  var done=list.filter(function(t){ return R[t.id] || t.skip; }).length, pct=Math.round(done*100/list.length);
   var mine=list.filter(function(t){ return t.who===ME.role; });
   var sub = ME.role ? '你今天要做 '+mine.length+' 件'+(mine.length?'：'+mine.map(function(t){ return TASKDEF[t.k].name; }).join('、'):'')
                     : '今天 '+esc(NAMES.a)+' 和 '+esc(NAMES.b)+' 的事，已完成 '+done+' 件';
-  var h=setupBanner()+'<div class="card hero"><div class="ring" style="--p:'+pct+'"><b>'+done+'/'+list.length+'</b></div><div><div class="t">'+md(TODAY)+' · 今天</div><div class="sub">'+sub+'</div></div></div>';
+  var myLv=ME.role && leaveRolesOn(TODAY)[ME.role];
+  if (myLv) sub='你今天请假，你的事由 '+esc(nameOf(other(ME.role)))+' 代做';
+  var h=setupBanner()+pendingBanner()+'<div class="card hero"><div class="ring" style="--p:'+pct+'"><b>'+done+'/'+list.length+'</b></div><div><div class="t">'+md(TODAY)+' · 今天</div><div class="sub">'+sub+'</div></div></div>';
   var miss=monthMisses();
   if (miss.length) h += '<div class="alert"><div><b>⚠ 本月有 '+miss.length+' 件漏做或数量不够</b>（已锁定，不能补，会计入统计）</div>'
     + miss.map(function(t){ return '<div class="row">'+md(t.date)+' · '+TASKDEF[t.k].name+' · '+esc(nameOf(t.who))+' <span class="pill '+STP[statusOf(t)]+'">'+STL[statusOf(t)]+'</span></div>'; }).join('') + '</div>';
@@ -367,9 +409,14 @@ function renderToday(){
 // ================= 本月 =================
 function chip(t){
   var s=statusOf(t), def=TASKDEF[t.k];
+  if (s==='skip') return '<div class="chip '+def.cls+' plan" title="两人都请假">'+({sell:'销卡', stock:'库存', clean:'清理+通知', unbind:'解绑'}[t.k])+' · 不用做</div>';
   var mark = s==='short' ? '差'+(t.target-(R[t.id].data.stock||0)) : ({done:'✓',todo:'待',miss:'漏',plan:''}[s] || '');
   var label = {sell:'销卡', stock:'库存 '+t.target, clean:'清理+通知', unbind:'解绑'}[t.k];
   return '<div class="chip '+def.cls+' '+s+'" title="'+esc(def.name+' · '+nameOf(t.who)+' · '+STL[s])+'">'+label+' · '+esc(nameOf(t.who))+'<span class="st">'+mark+'</span></div>';
+}
+function dayMarks(ds){
+  if (isOffDay(ds)) return '<div class="chip offc">🌴 全员休息</div>';
+  var lv=leaveRolesOn(ds); return Object.keys(lv).map(function(k){ return '<div class="chip lvc">🏖 '+esc(nameOf(k))+' 请假</div>'; }).join('');
 }
 function monthHead(extra){
   var y=st.month.getFullYear(), m=st.month.getMonth();
@@ -383,8 +430,9 @@ function renderMonth(){
   var lst='';
   for (var d=1; d<=n; d++){
     var ds=y+'-'+pad(m+1)+'-'+pad(d), ts=tasksOn(ds);
-    h += '<div class="day'+(ds===TODAY?' today':'')+'" data-day="'+ds+'"><div class="dn">'+d+(ds===TODAY?'<span class="tg">今天</span>':'')+'</div>'+ts.map(chip).join('')+'</div>';
-    lst += '<div class="lrow'+(ds===TODAY?' today':'')+'" data-day="'+ds+'"><div class="ld">'+(m+1)+'/'+d+'<small>'+WD[parse(ds).getDay()]+'</small></div><div class="lc">'+ts.map(chip).join('')+'</div></div>';
+    var extra=dayMarks(ds), cells=extra+ts.map(chip).join('');
+    h += '<div class="day'+(ds===TODAY?' today':'')+'" data-day="'+ds+'"><div class="dn">'+d+(ds===TODAY?'<span class="tg">今天</span>':'')+'</div>'+cells+'</div>';
+    lst += '<div class="lrow'+(ds===TODAY?' today':'')+'" data-day="'+ds+'"><div class="ld">'+(m+1)+'/'+d+'<small>'+WD[parse(ds).getDay()]+'</small></div><div class="lc">'+cells+'</div></div>';
   }
   var tail=(7-((lead+n)%7))%7; for (var j=0;j<tail;j++) h+='<div class="day out"></div>';
   h += '</div><div class="mlist">'+lst+'</div>';
@@ -393,7 +441,10 @@ function renderMonth(){
 }
 function openDay(ds){
   st.day=ds;
-  openModal(md(ds)+(ds===TODAY?' · 今天':''), '<div class="tasks" style="grid-template-columns:1fr">'+tasksOn(ds).map(taskCard).join('')+'</div>', '<span class="spacer"></span><button class="btn" data-close>关闭</button>');
+  var ts=tasksOn(ds), off=isOffDay(ds), body=dayMarks(ds) ? '<div style="display:flex;gap:6px;flex-wrap:wrap">'+dayMarks(ds)+'</div>' : '';
+  body += ts.length ? '<div class="tasks" style="grid-template-columns:1fr">'+ts.map(taskCard).join('')+'</div>' : '<div class="offday">🌴 这天全员休息，不排任何事，也不算漏做</div>';
+  var foot = (isBoss() && ds>=TODAY ? '<button class="btn sm" data-off="'+ds+'">'+(off?'取消全员休息':'设为全员休息')+'</button>' : '')+'<span class="spacer"></span><button class="btn" data-close>关闭</button>';
+  openModal(md(ds)+(ds===TODAY?' · 今天':''), body, foot);
 }
 
 // ================= 统计 =================
@@ -404,24 +455,67 @@ function renderStats(){
     var ds=y+'-'+pad(m+1)+'-'+pad(d);
     tasksOn(ds).forEach(function(t){
       var p=P[t.who]; if (!p) return; var s=statusOf(t), r=R[t.id];
-      if (s==='plan' || s==='todo') return;
+      if (s==='plan' || s==='todo' || s==='skip') return;
       p.due++; if (r) p.done++; if (s==='miss') p.miss++; if (s==='short') p.short++;
       if (t.k==='stock' && r) p.stock += +r.data.qty||0;
       if (t.k==='sell' && r) p.sell += +r.data.qty||0;
     });
-    var tk=tasksOn(ds).filter(function(t){ return t.k==='stock'; })[0], r2=R[tk.id];
-    rows += '<tr><td>'+(m+1)+'/'+d+' '+WD[parse(ds).getDay()]+'</td><td>'+esc(nameOf(tk.who))+'</td><td class="n">'+tk.target+'</td><td class="n">'+(r2?esc(r2.data.stock):'')+'</td><td class="n">'+(r2&&r2.data.qty?esc(r2.data.qty):'')+'</td><td>'+(ds>TODAY?'':'<span class="pill '+STP[statusOf(tk)]+'">'+STL[statusOf(tk)]+'</span>')+'</td></tr>';
+    ['a','b'].forEach(function(k){ if (leaveRolesOn(ds)[k]) P[k].leave=(P[k].leave||0)+1; });
+    var tk=tasksOn(ds).filter(function(t){ return t.k==='stock'; })[0];
+    if (!tk){ rows += '<tr><td>'+(m+1)+'/'+d+' '+WD[parse(ds).getDay()]+'</td><td colspan="5" class="sub">🌴 全员休息</td></tr>'; continue; }
+    var r2=R[tk.id];
+    rows += '<tr><td>'+(m+1)+'/'+d+' '+WD[parse(ds).getDay()]+'</td><td>'+(tk.who?esc(nameOf(tk.who)):'—')+(tk.coverFor?' <span class="sub">（代 '+esc(nameOf(tk.coverFor))+'）</span>':'')+'</td><td class="n">'+tk.target+'</td><td class="n">'+(r2?esc(r2.data.stock):'')+'</td><td class="n">'+(r2&&r2.data.qty?esc(r2.data.qty):'')+'</td><td>'+(ds>TODAY?'':'<span class="pill '+STP[statusOf(tk)]+'">'+STL[statusOf(tk)]+'</span>')+'</td></tr>';
   }
   function pc(k){
     var p=P[k], rate=p.due?Math.round(p.done*100/p.due):0;
     return '<div class="card pcard"><div class="dayhead"><h2>'+esc(nameOf(k))+'</h2><span class="sub">'+k.toUpperCase()+'</span><span class="spacer"></span><span class="pill '+(p.miss?'p-miss':'p-done')+'">'+(p.miss?'漏做 '+p.miss+' 次':'没有漏做')+'</span></div>'
       + '<div><span class="big">'+rate+'%</span> <span class="sub">完成率（不含今天）</span></div><div class="bar2"><i style="width:'+rate+'%"></i></div>'
       + '<div class="kv"><span>应做</span><span>'+p.due+' 件</span><span>已完成</span><span>'+p.done+' 件</span><span>漏做</span><span>'+p.miss+' 件</span><span>库存没补够</span><span>'+p.short+' 次</span>'
-      + '<span>销卡合计</span><span>'+p.sell+' 张</span><span>新增成品号合计</span><span>'+p.stock+' 个</span></div></div>';
+      + '<span>请假</span><span>'+(p.leave||0)+' 天</span><span>销卡合计</span><span>'+p.sell+' 张</span><span>新增成品号合计</span><span>'+p.stock+' 个</span></div></div>';
   }
   $('view').innerHTML='<section class="card">'+monthHead()+'</section><div class="stats">'+pc('a')+pc('b')+'</div>'
     + '<section class="card pcard"><h2>每日库存：目标 vs 实际</h2><div class="stkwrap"><table class="stk"><thead><tr><th>日期</th><th>负责人</th><th class="n">目标库存</th><th class="n">实际库存</th><th class="n">本次新增</th><th>状态</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'
     + '<section class="card feed"><h2>'+(m+1)+'月全部打卡记录</h2>'+feed(200, y+'-'+pad(m+1))+'</section>';
+}
+
+// ================= 请假 =================
+var LST={pending:'待批准', approved:'已批准', rejected:'已拒绝', cancelled:'已撤销'};
+var LSP={pending:'p-todo', approved:'p-done', rejected:'p-miss', cancelled:'p-plan'};
+function leaveRow(l){
+  var span = l.start===l.end ? md(l.start) : md(l.start)+' – '+md(l.end), acts='';
+  if (l.status==='pending' && isBoss()) acts += '<button class="btn sm primary" data-lv="'+l.id+'" data-act="approve">同意</button><button class="btn sm" data-lv="'+l.id+'" data-act="reject">拒绝</button>';
+  if ((l.status==='pending' && l.who===ME.role) || (isBoss() && (l.status==='approved' || l.status==='pending'))) acts += '<button class="btn sm" data-lv="'+l.id+'" data-act="cancel">撤销</button>';
+  var days=Math.round((parse(l.end)-parse(l.start))/864e5)+1;
+  return '<div class="lv '+l.status+'"><span class="who'+(l.who===ME.role?' me':'')+'">'+esc(l.user_name)+'</span><span class="dt">'+span+'</span><span class="sub">共 '+days+' 天'+(l.reason?' · '+esc(l.reason):'')+'</span>'
+    + '<span class="pill '+LSP[l.status]+'">'+LST[l.status]+'</span>'
+    + '<span class="sub">'+(l.created_by_name && l.created_by_name!==l.user_name?esc(l.created_by_name)+' 登记':'')+(l.decided_by_name && l.status!=='pending'?' · '+esc(l.decided_by_name)+' 处理':'')+'</span>'
+    + '<span class="spacer"></span>'+acts+'</div>';
+}
+function renderLeave(){
+  var h='';
+  if (ME.role){
+    h += '<section class="card set"><h2>申请请假</h2><div class="lvform">从 <input type="date" id="lvS" value="'+TODAY+'" min="'+TODAY+'"> 到 <input type="date" id="lvE" value="'+TODAY+'" min="'+TODAY+'"> <input type="text" id="lvR" maxlength="200" placeholder="原因（可不填）"> <button class="btn primary" id="lvApply">提交申请</button></div>'
+      + '<div class="sub">老板同意后生效：那几天你的事会自动交给 '+esc(nameOf(other(ME.role)))+'，不算你漏做；之后的轮流顺序不变。</div></section>';
+  }
+  if (isBoss()){
+    var pend=pendingLeaves();
+    h += '<section class="card set"><h2>待批准'+(pend.length?'（'+pend.length+'）':'')+'</h2><div class="lvlist">'+(pend.map(leaveRow).join('') || '<div class="sub">没有待批准的请假</div>')+'</div></section>';
+    h += '<section class="card set"><h2>替员工登记请假（直接生效）</h2><div class="lvform"><select id="lvW"><option value="a">'+esc(NAMES.a)+'（A）</option><option value="b">'+esc(NAMES.b)+'（B）</option></select> 从 <input type="date" id="lvS2" value="'+TODAY+'"> 到 <input type="date" id="lvE2" value="'+TODAY+'"> <input type="text" id="lvR2" maxlength="200" placeholder="原因（可不填）"> <button class="btn gold" id="lvAdd">登记</button></div>'
+      + '<div class="sub">临时换一天、或者某天全员休息：去「本月」点那一天，用「改给…」「设为全员休息」。</div></section>';
+  }
+  var mine = LEAVES.filter(function(l){ return isBoss() || l.who===ME.role || !ME.role; }).filter(function(l){ return isBoss() ? l.status!=='pending' : true; });
+  h += '<section class="card set"><h2>'+(isBoss()?'请假记录':ME.role?'我的请假':'请假记录')+'</h2><div class="lvlist">'+(mine.map(leaveRow).join('') || '<div class="sub">还没有请假记录</div>')+'</div></section>';
+  $('view').innerHTML=h;
+}
+function reloadAll(msg){ var ym=ymOf(st.month); LOADED={}; return loadMonth(ym).then(function(){ if (ym!==TODAY.slice(0,7)) LOADED[TODAY.slice(0,7)]=false; render(); if (msg) toast(msg); }); }
+function submitLeave(boss){
+  var s1=$(boss?'lvS2':'lvS').value, e1=$(boss?'lvE2':'lvE').value, r1=$(boss?'lvR2':'lvR').value.trim();
+  if (!s1 || !e1 || e1<s1){ toast('日期不对：结束日期不能早于开始日期'); return; }
+  var body={start:s1, end:e1, reason:r1}; if (boss) body.who=$('lvW').value;
+  postJSON('/duty/leave/', body).then(function(){ return reloadAll(boss?'已登记，直接生效':'已提交，等老板批准'); }).catch(function(e){ toast(e.message); });
+}
+function saveCfgPatch(patch, msg, backDay){
+  return postJSON('/duty/settings/', {config:patch}, 'PUT').then(function(){ closeModal(); return reloadAll(msg); }).then(function(){ if (backDay) openDay(backDay); }).catch(function(e){ toast(e.message); });
 }
 
 // ================= 设置（老板 / CEO 可改） =================
@@ -515,7 +609,7 @@ function act(path, body, msg){
 // ================= 渲染 / 事件 =================
 function render(){
   document.querySelectorAll('#tabs button').forEach(function(b){ b.classList.toggle('on', b.dataset.tab===st.tab); });
-  ({today:renderToday, month:renderMonth, stats:renderStats, settings:renderSettings})[st.tab]();
+  ({today:renderToday, month:renderMonth, leave:renderLeave, stats:renderStats, settings:renderSettings})[st.tab]();
 }
 function goMonth(d){
   st.month=d; var ym=ymOf(d);
@@ -537,6 +631,12 @@ document.addEventListener('click', function(e){
   else if (t.id==='sSave') saveSettings(false);
   else if (d.ub){ st.ubDate=d.ub; document.querySelectorAll('[data-ub]').forEach(function(b){ b.classList.toggle('primary', b.dataset.ub===d.ub); }); }
   else if (t.id==='ovrReset') saveSettings(true);
+  else if (t.id==='lvApply') submitLeave(false);
+  else if (t.id==='lvAdd') submitLeave(true);
+  else if (d.lv){ var act=d.act; if (act==='cancel' && !t._sure){ t._sure=true; t.textContent='再点一次确认撤销'; return; }
+    postJSON('/duty/leave/'+d.lv+'/'+act+'/', {}).then(function(){ return reloadAll({approve:'已同意',reject:'已拒绝',cancel:'已撤销'}[act]); }).catch(function(e){ toast(e.message); }); }
+  else if (d.swap!==undefined){ var sw=Object.assign({}, S.swaps||{}); if (d.to) sw[d.swap]=d.to; else delete sw[d.swap]; saveCfgPatch({swaps:sw}, d.to?'已改给 '+nameOf(d.to):'已恢复原排班', st.day); }
+  else if (d.off){ var offs=(S.offDays||[]).slice(), i=offs.indexOf(d.off); if (i>=0) offs.splice(i,1); else offs.push(d.off); saveCfgPatch({offDays:offs}, i>=0?'已取消全员休息':'这天设为全员休息', st.day); }
 });
 document.addEventListener('change', function(e){
   if (e.target.id==='fImg' && e.target.files[0]){ shrink(e.target.files[0], function(blob, url){ fx.blob=blob; fx.removed=false; $('fPrev').innerHTML='<img src="'+url+'" alt="截图">'; }); }

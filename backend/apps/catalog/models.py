@@ -1131,3 +1131,45 @@ class DutyRecord(models.Model):
 
     def __str__(self) -> str:
         return f"{self.date} · {self.get_task_display()}"
+
+
+class DutyLeave(models.Model):
+    """值班请假：员工申请、老板批准。批准后这几天他的事自动交给另一个人，轮流顺序不变。"""
+
+    STATUS_PENDING = "pending"
+    STATUS_APPROVED = "approved"
+    STATUS_REJECTED = "rejected"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_CHOICES = (
+        (STATUS_PENDING, "待批准"),
+        (STATUS_APPROVED, "已批准"),
+        (STATUS_REJECTED, "已拒绝"),
+        (STATUS_CANCELLED, "已撤销"),
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="duty_leaves", verbose_name="请假人"
+    )
+    start_date = models.DateField(verbose_name="开始日期")
+    end_date = models.DateField(verbose_name="结束日期")
+    reason = models.CharField(max_length=200, blank=True, default="", verbose_name="原因")
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True,
+                              verbose_name="状态")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+        verbose_name="提交人",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="提交时间")
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+        verbose_name="处理人",
+    )
+    decided_at = models.DateTimeField(null=True, blank=True, verbose_name="处理时间")
+
+    class Meta:
+        ordering = ["-start_date", "-id"]
+        verbose_name = "值班请假"
+        verbose_name_plural = "值班请假"
+
+    def __str__(self) -> str:
+        return f"{self.user} {self.start_date}~{self.end_date} {self.get_status_display()}"
