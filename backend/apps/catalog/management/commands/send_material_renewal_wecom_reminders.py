@@ -1,34 +1,36 @@
-"""物料续费到期提醒：把快到期 / 已过期的物料汇总成一条消息，推送到企业微信群（消息推送 Webhook）。
+"""物料续费到期提醒：推送到企业微信内部群（群机器人 / 消息推送 Webhook）。
 
-提醒规则（按 Django TIME_ZONE 的本地日期算）：
-  - 距离到期还剩 N 天，且 N 在提醒天数里（默认 7、3、1、0 天）时提醒；
-  - 已经过期、还没登记续费的，每天都提醒，直到在系统里点「登记续费」；
-  - 只看「启用」的物料；当天没有要提醒的就不发。
+两次固定推送（只看「启用」的物料，按 Django TIME_ZONE=Asia/Shanghai 的日期算）：
+  --due tomorrow   到期前一天晚上 22:00：明天到期的物料
+  --due today      到期当天下午 15:00：今天到期的物料
+当天没有要提醒的就不发。
 
-建议 crontab（每天 10:00 发一次）::
+crontab（服务器上 crontab -e）::
 
-    0 10 * * * cd /var/www/xinhuo/app && PYTHONPATH=. .venv/bin/python backend/manage.py send_material_renewal_wecom_reminders
+    CRON_TZ=Asia/Shanghai
+    0 15 * * * cd /var/www/xinhuo/app && PYTHONPATH=. .venv/bin/python backend/manage.py send_material_renewal_wecom_reminders --due today >> /var/log/xinhuo-material-remind.log 2>&1
+    0 22 * * * cd /var/www/xinhuo/app && PYTHONPATH=. .venv/bin/python backend/manage.py send_material_renewal_wecom_reminders --due tomorrow >> /var/log/xinhuo-material-remind.log 2>&1
 
-环境变量：
-  WECOM_REMINDER_ENABLED=1                      # 与订阅提醒共用的总开关
-  MATERIAL_WECOM_WEBHOOK_URL=https://qyapi...   # 可选：物料提醒单独发到另一个群；不填则用 WECOM_GROUP_WEBHOOK_URL
-  MATERIAL_REMIND_DAYS=7,3,1,0                  # 可选：提前几天提醒
-  MATERIAL_REMIND_MENTION=@all                  # 可选：@all 或手机号（逗号分隔），会另发一条文本消息来 @ 人
-  STAFF_FRONTEND_BASE_URL=https://...           # 消息末尾「去续费」链接的站点地址
+环境变量（写在项目根目录 .env，不要提交到 GitHub）：
+  WECOM_REMINDER_ENABLED=1                      # 总开关（和订阅提醒共用）
+  MATERIAL_WECOM_WEBHOOK_URL=https://qyapi...   # 物料提醒群的 Webhook；不填则用 WECOM_GROUP_WEBHOOK_URL
+  MATERIAL_REMIND_MENTION=@all                  # 可选：另发一条文本消息 @ 人（@all 或手机号，逗号分隔）
+  STAFF_FRONTEND_BASE_URL=http://...            # 消息末尾「去续费登记」链接用的职员端地址
 
 用法：
-  --dry-run        只打印，不发送
-  --test-message   发一条测试消息，验证 Webhook
-  --date YYYY-MM-DD  按指定日期计算（测试用）
+  --due today|tomorrow   提醒哪一天到期的（必填，除非 --test-message）
+  --dry-run              只打印，不发送
+  --test-message         发一条测试消息，验证 Webhook
+  --date YYYY-MM-DD      把“今天”当成这一天来算（测试用）
 """
 
 from __future__ import annotations
 
 import os
-from datetime import date
+from datetime import date, timedelta
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
@@ -36,16 +38,7 @@ from backend.apps.catalog.models import MaterialRenewal
 from backend.apps.catalog.wecom_webhook import WecomWebhookError, post_webhook_json, send_markdown
 
 _WEEKDAY_CN = ("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-
-
-def _remind_days() -> set[int]:
-    raw = (os.environ.get("MATERIAL_REMIND_DAYS") or "7,3,1,0").replace("，", ",")
-    out: set[int] = set()
-    for part in raw.split(","):
-        part = part.strip()
-        if part.isdigit():
-            out.add(int(part))
-    return out or {7, 3, 1, 0}
+_CUR_SYMBOL = {"CNY": "¥", "USD": "$", "JPY": "JP¥", "HKD": "HK$", "EUR": "€"}
 
 
 def _webhook_url() -> str:
@@ -55,134 +48,139 @@ def _webhook_url() -> str:
 
 def _page_url() -> str:
     base = (getattr(settings, "STAFF_FRONTEND_BASE_URL", None) or "").strip().rstrip("/")
-    return f"{base}/material-renewal" if base else ""
+    if not base or "localhost" in base or "127.0.0.1" in base:
+        return ""
+    return f"{base}/material-renewal"
 
 
-def _fmt_amount(obj: MaterialRenewal) -> str:
+def _day_cn(d: date) -> str:
+    return f"{d.month}月{d.day}日 {_WEEKDAY_CN[d.weekday()]}"
+
+
+def _money(obj: MaterialRenewal) -> str:
     if obj.amount is None:
         return ""
     amt = f"{obj.amount:,.2f}".rstrip("0").rstrip(".")
     cur = (obj.currency or "").upper()
-    sym = {"CNY": "¥", "USD": "$", "JPY": "JP¥", "HKD": "HK$", "EUR": "€"}.get(cur)
-    return f"{sym}{amt}" if sym else f"{amt} {cur}".strip()
-
-
-def _line(obj: MaterialRenewal, left: int) -> str:
-    if left < 0:
-        when = f'<font color="warning">已过期 {-left} 天</font>'
-    elif left == 0:
-        when = '<font color="warning">今天到期</font>'
-    else:
-        when = f"还剩 {left} 天"
-    d = obj.next_due_at
-    parts = [f"**{obj.name}**", f"{d.month}月{d.day}日{_WEEKDAY_CN[d.weekday()]}", when]
-    money = _fmt_amount(obj)
-    if money:
-        if obj.cycle_type == MaterialRenewal.CYCLE_MONTHLY:
-            money += "/月"
-        elif obj.cycle_type == MaterialRenewal.CYCLE_YEARLY:
-            money += "/年"
-        elif obj.cycle_days:
-            money += f"/{obj.cycle_days}天"
-        parts.append(money)
-    text = "> " + " · ".join(parts)
-    extra = " ".join(x for x in [(obj.category or "").strip(), (obj.remark or "").strip()] if x)
-    if extra:
-        text += f"\n> <font color=\"comment\">{extra[:80]}</font>"
+    text = f"{_CUR_SYMBOL[cur]}{amt}" if cur in _CUR_SYMBOL else f"{amt} {cur}".strip()
+    if obj.cycle_type == MaterialRenewal.CYCLE_MONTHLY:
+        return text + "/月"
+    if obj.cycle_type == MaterialRenewal.CYCLE_YEARLY:
+        return text + "/年"
+    if obj.cycle_days:
+        return text + f"/{obj.cycle_days}天"
     return text
 
 
-def build_digest(today: date, remind_days: set[int]) -> tuple[list[tuple[MaterialRenewal, int]], list[tuple[MaterialRenewal, int]]]:
-    """返回 (已过期列表, 即将到期列表)，元素为 (物料, 剩余天数)。"""
-    overdue: list[tuple[MaterialRenewal, int]] = []
-    upcoming: list[tuple[MaterialRenewal, int]] = []
-    for obj in MaterialRenewal.objects.filter(is_active=True).order_by("next_due_at", "id"):
-        left = (obj.next_due_at - today).days
-        if left < 0:
-            overdue.append((obj, left))
-        elif left in remind_days:
-            upcoming.append((obj, left))
-    return overdue, upcoming
+def _item_lines(i: int, obj: MaterialRenewal) -> list[str]:
+    head = f"> {i}. **{obj.name}**"
+    meta = [x for x in ((obj.category or "").strip(), _money(obj)) if x]
+    if meta:
+        head += "　" + " · ".join(meta)
+    lines = [head]
+    remark = (obj.remark or "").strip().replace("\n", " ")
+    if remark:
+        lines.append(f'> <font color="comment">　　备注：{remark[:60]}</font>')
+    return lines
 
 
-def build_markdown(today: date, overdue, upcoming, page_url: str) -> str:
-    lines = [f"**物料续费提醒** <font color=\"comment\">{today.month}月{today.day}日{_WEEKDAY_CN[today.weekday()]}</font>", ""]
-    if overdue:
-        lines.append(f"已过期 {len(overdue)} 项（续费后请在系统里点「登记续费」）：")
-        lines += [_line(o, d) for o, d in overdue]
-        lines.append("")
-    if upcoming:
-        lines.append(f"即将到期 {len(upcoming)} 项：")
-        lines += [_line(o, d) for o, d in upcoming]
-        lines.append("")
+def due_items(target: date) -> list[MaterialRenewal]:
+    return list(MaterialRenewal.objects.filter(is_active=True, next_due_at=target).order_by("category", "name", "id"))
+
+
+def build_markdown(mode: str, today: date, items: list[MaterialRenewal], page_url: str) -> str:
+    """mode: 'tomorrow'（前一天 22:00）/ 'today'（当天 15:00）。"""
+    if mode == "tomorrow":
+        target = today + timedelta(days=1)
+        lines = [
+            "**⏰ 物料明天到期 · 请提前续费**",
+            f'<font color="comment">到期日：{_day_cn(target)}</font>',
+            "",
+            f'明天有 <font color="warning">{len(items)} 项</font>物料到期：',
+        ]
+        tail = "请今晚或明天上午安排续费，续费后在系统里点「登记续费」。"
+    else:
+        target = today
+        lines = [
+            '**🔴 物料今天到期 · <font color="warning">请尽快续费</font>**',
+            f'<font color="comment">到期日：{_day_cn(target)}（今天）</font>',
+            "",
+            f'今天有 <font color="warning">{len(items)} 项</font>物料到期：',
+        ]
+        tail = "今天下班前务必续费，避免停用；续费后在系统里点「登记续费」，下次到期日会自动顺延。"
+    for i, obj in enumerate(items, 1):
+        lines += _item_lines(i, obj)
+    lines += ["", tail]
     if page_url:
-        lines.append(f"[去续费登记]({page_url})")
-    text = "\n".join(lines).rstrip()
+        lines.append(f"[👉 打开物料续费提醒]({page_url})")
+    text = "\n".join(lines)
     raw = text.encode("utf-8")
-    if len(raw) > 4000:
-        text = raw[:3900].decode("utf-8", "ignore").rstrip() + "\n\n>内容过长已截断，请打开系统查看全部。"
+    if len(raw) > 4000:  # 企业微信 markdown 上限 4096 字节
+        text = raw[:3850].decode("utf-8", "ignore").rstrip() + "\n\n> 内容太多已截断，请打开系统查看全部。"
     return text
 
 
 class Command(BaseCommand):
-    help = "把快到期 / 已过期的物料续费汇总后推送到企业微信群。"
+    help = "物料续费到期提醒：--due tomorrow（前一天 22:00）/ --due today（当天 15:00），推送到企业微信群。"
 
     def add_arguments(self, parser):
+        parser.add_argument("--due", choices=("today", "tomorrow"), help="提醒今天到期的，还是明天到期的。")
         parser.add_argument("--dry-run", action="store_true", help="只打印，不发送。")
         parser.add_argument("--test-message", action="store_true", help="只发一条测试消息。")
-        parser.add_argument("--date", dest="today", default="", help="按指定日期计算（YYYY-MM-DD），测试用。")
+        parser.add_argument("--date", dest="today", default="", help="把今天当成指定日期（YYYY-MM-DD），测试用。")
 
     def handle(self, *args, **opts):
         if not getattr(settings, "WECOM_REMINDER_ENABLED", False):
-            self.stdout.write(self.style.WARNING("未开启：请设置环境变量 WECOM_REMINDER_ENABLED=1"))
+            self.stdout.write(self.style.WARNING("未开启：请在 .env 设置 WECOM_REMINDER_ENABLED=1"))
             return
         url = _webhook_url()
         if not url:
-            self.stdout.write(self.style.ERROR("缺少 Webhook：请设置 MATERIAL_WECOM_WEBHOOK_URL 或 WECOM_GROUP_WEBHOOK_URL"))
-            return
+            raise CommandError("缺少 Webhook：请在 .env 设置 MATERIAL_WECOM_WEBHOOK_URL")
 
         if opts["test_message"]:
+            md = "**✅ 物料续费提醒 · 测试消息**\n> Webhook 配置正确。\n> 到期前一天 22:00、到期当天 15:00 会在这里提醒。"
             if opts["dry_run"]:
-                self.stdout.write("[dry-run] 将发送测试消息。")
+                self.stdout.write(f"[dry-run] 将发送：\n{md}")
                 return
             try:
-                send_markdown(url, "**薪火系统 · 物料续费提醒**\n>测试消息：Webhook 配置正确，到期前会在这里提醒。")
+                send_markdown(url, md)
             except WecomWebhookError as e:
-                self.stdout.write(self.style.ERROR(str(e)))
-                raise SystemExit(1) from e
-            self.stdout.write(self.style.SUCCESS("测试消息已发送。"))
+                raise CommandError(f"发送失败：{e}") from e
+            self.stdout.write(self.style.SUCCESS("测试消息已发送，去群里看看。"))
             return
 
+        mode = opts.get("due")
+        if not mode:
+            raise CommandError("请加上 --due today 或 --due tomorrow")
         today = timezone.localdate()
         if opts["today"]:
-            today = parse_date(opts["today"]) or None
+            today = parse_date(opts["today"])
             if today is None:
-                self.stdout.write(self.style.ERROR("--date 格式应为 YYYY-MM-DD"))
-                raise SystemExit(2)
+                raise CommandError("--date 格式应为 YYYY-MM-DD")
 
-        days = _remind_days()
-        overdue, upcoming = build_digest(today, days)
-        if not overdue and not upcoming:
-            self.stdout.write(f"{today} 没有需要提醒的物料（提醒天数 {sorted(days, reverse=True)}），不发送。")
+        target = today + timedelta(days=1) if mode == "tomorrow" else today
+        items = due_items(target)
+        stamp = timezone.localtime().strftime("%Y-%m-%d %H:%M")
+        if not items:
+            self.stdout.write(f"[{stamp}] {target} 没有到期的物料，不发送。")
             return
 
-        md = build_markdown(today, overdue, upcoming, _page_url())
-        self.stdout.write(f"{today} 已过期 {len(overdue)} 项，即将到期 {len(upcoming)} 项：\n{md}")
+        md = build_markdown(mode, today, items, _page_url())
+        self.stdout.write(f"[{stamp}] {target} 到期 {len(items)} 项：\n{md}")
         if opts["dry_run"]:
-            self.stdout.write(self.style.WARNING("\n[dry-run] 未发送。"))
+            self.stdout.write(self.style.WARNING("[dry-run] 未发送。"))
             return
-
         try:
             send_markdown(url, md)
             mention = (os.environ.get("MATERIAL_REMIND_MENTION") or "").strip()
             if mention:
-                # 企微 markdown 消息不能 @ 人，用一条短文本消息来 @
+                # markdown 消息不能 @ 人，另发一条短文本来 @
                 mobiles = [m.strip() for m in mention.replace("，", ",").split(",") if m.strip()]
+                word = "明天" if mode == "tomorrow" else "今天"
                 post_webhook_json(url, {"msgtype": "text", "text": {
-                    "content": f"有 {len(overdue) + len(upcoming)} 项物料需要续费，请查看上一条提醒。",
+                    "content": f"{word}有 {len(items)} 项物料到期，请看上一条提醒。",
                     "mentioned_mobile_list": mobiles,
                 }})
         except WecomWebhookError as e:
-            self.stdout.write(self.style.ERROR(f"推送失败：{e}"))
-            raise SystemExit(1) from e
-        self.stdout.write(self.style.SUCCESS("\n已推送到企业微信群。"))
+            raise CommandError(f"推送失败：{e}") from e
+        self.stdout.write(self.style.SUCCESS("已推送到企业微信群。"))
