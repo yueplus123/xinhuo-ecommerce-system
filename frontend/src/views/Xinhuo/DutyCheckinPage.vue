@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 值班打卡：内嵌 public/duty.html，数据走 /api/duty/*。
+ * 备忘打卡（原值班打卡）：内嵌 public/duty.html，数据走 /api/duty/*。
  * 销卡、补库存 A/B 轮流；月底清理 + 通知充值；月初 1–3 号解绑。只能当天打卡，漏了不能补。
  */
 defineOptions({ name: 'DutyCheckin' })
@@ -11,7 +11,7 @@ const src = `/duty.html?v=${Date.now()}`
 
 <template>
   <div class="duty-checkin">
-    <iframe :src="src" title="值班打卡" class="duty-checkin__frame"></iframe>
+    <iframe :src="src" title="备忘打卡" class="duty-checkin__frame"></iframe>
   </div>
 </template>
 

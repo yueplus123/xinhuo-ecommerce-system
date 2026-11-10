@@ -137,6 +137,12 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         meta: { title: '教程合计(对客户)', icon: 'Reading', navGroup: 2 }
       },
       {
+        path: 'duty-checkin',
+        component: () => import('@/views/Xinhuo/DutyCheckinPage.vue'),
+        name: 'DutyCheckin',
+        meta: { title: '备忘打卡', icon: 'Finished', navGroup: 2 }
+      },
+      {
         path: 'shared-apple-id',
         component: () => import('@/views/Xinhuo/SharedAppleIdPage.vue'),
         name: 'SharedAppleId',
@@ -257,12 +263,6 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
             }
           }
         ]
-      },
-      {
-        path: 'duty-checkin',
-        component: () => import('@/views/Xinhuo/DutyCheckinPage.vue'),
-        name: 'DutyCheckin',
-        meta: { title: '值班打卡', icon: 'Finished', navGroup: 5 }
       },
       {
         path: 'material-renewal',
