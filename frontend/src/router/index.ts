@@ -85,21 +85,14 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         path: 'products',
         component: () => import('@/views/Xinhuo/products/CatalogLibraryPage.vue'),
         name: 'ProductPlatforms',
-        meta: { title: '业务+价格', icon: 'Goods', guestAllowed: true, navGroup: 1 }
-      },
-      {
-        // 教程+话术（知识库）：按平台分，平台里分 问答 / 教程 / 快捷语；内嵌 public/knowledge.html
-        path: 'knowledge',
-        component: () => import('@/views/Xinhuo/KnowledgeBasePage.vue'),
-        name: 'KnowledgeBase',
-        meta: { title: '教程+话术', icon: 'Notebook', guestAllowed: true, navGroup: 1 }
+        meta: { title: '平台/商品', icon: 'Goods', guestAllowed: true, navGroup: 1 }
       },
       {
         // 旧版平台列表，保留备用
         path: 'products/classic',
         component: () => import('@/views/Xinhuo/products/PlatformGridPage.vue'),
         name: 'ProductPlatformsClassic',
-        meta: { title: '业务+价格（旧版）', hidden: true, canTo: true, activeMenu: '/products', guestAllowed: true }
+        meta: { title: '平台/商品（旧版）', hidden: true, canTo: true, activeMenu: '/products', guestAllowed: true }
       },
       {
         path: 'products/classic/:platformId',

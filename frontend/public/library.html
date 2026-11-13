@@ -503,10 +503,12 @@ function renderDrawer(){
     + '</div></section>';
 
   if (s.price_notice) h += '<section class="card blk"><div class="bh"><h4>价格说明</h4></div><div class="txt">'+esc(s.price_notice)+'</div></section>';
-  // 话术、文档教程已移到「教程+话术」页面（public/knowledge.html），这里不再展示
+  if (hasPh) h += '<section class="card blk"><div class="bh"><h4>话术</h4><span class="faint" style="font-size:13px">'+s.phrases.length+' 条</span></div>'+s.phrases.map(function(t,i){ return '<div class="phrase"><div class="txt">'+linkify(t)+'</div><button class="mini" data-cp="'+i+'">复制这条</button></div>'; }).join('')+'</section>';
   if (noteExtra(s)) h += '<section class="card blk"><div class="bh"><h4>备注</h4></div><div class="txt">'+esc(noteExtra(s))+'</div></section>';
   if (s.extend_config) h += '<section class="card blk"><div class="bh"><h4>扩展配置</h4></div><div class="txt">'+esc(s.extend_config)+'</div></section>';
   if (s.precaution) h += '<section class="card blk"><div class="bh"><h4>注意事项</h4></div><div class="txt">'+esc(s.precaution.replace(/\t/g,'\n'))+'</div></section>';
+  if (s.tutorials.length) h += '<section class="card blk"><div class="bh"><h4>文档教程</h4><span class="faint" style="font-size:13px">新窗口打开</span></div><div class="tut">'+s.tutorials.map(function(t){
+      return t.url ? '<a href="'+esc(t.url)+'" target="_blank" rel="noopener">📄 '+esc(t.name)+'</a>' : '<a>📄 '+esc(t.name)+' <span class="faint">（没找到链接）</span></a>'; }).join('')+'</div></section>';
   var miss=[];
   if (!s.price_notice && !skuPrices(s).length && !isUsd(s)) miss.push('价格');
   if (!hasPh) miss.push('话术'); if (!s.precaution) miss.push('注意事项'); if (!s.tutorials.length) miss.push('教程'); if (!shots) miss.push('会员截图'); if (!s.channels.length) miss.push('收款渠道');

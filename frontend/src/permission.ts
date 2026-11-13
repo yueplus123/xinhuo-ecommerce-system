@@ -26,7 +26,6 @@ function isGuestPathAllowed(path: string) {
     p === '/hall' ||
     p === '/products' ||
     p.startsWith('/products/') ||
-    p === '/knowledge' ||
     p === '/fanbox-stats' ||
     p === '/common-cards' ||
     p.startsWith('/common-cards/')
