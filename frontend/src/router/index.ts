@@ -95,11 +95,11 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         meta: { title: '教程+话术', icon: 'Notebook', guestAllowed: true, navGroup: 1 }
       },
       {
-        // 教程+话术管理：同一个页面的管理模式（新增 / 编辑 / 删除），只给超级管理员 / 老板 / CEO
+        // 旧地址：管理已经移到管理后台（/admin/knowledge），这里跳回只读的「教程+话术」
         path: 'knowledge-manage',
-        component: () => import('@/views/Xinhuo/KnowledgeManagePage.vue'),
-        name: 'KnowledgeManage',
-        meta: { title: '教程+话术管理', icon: 'EditPen', requiresManager: true, navGroup: 1 }
+        redirect: '/knowledge',
+        name: 'KnowledgeManageRedirect',
+        meta: { hidden: true }
       },
       {
         // 旧版平台列表，保留备用

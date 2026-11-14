@@ -23,9 +23,11 @@ const routes: RouteRecordRaw[] = [
       page('AAA图文远程', 'payment-tutorials', () => import('@/views/Content/PaymentTutorialsPage.vue')),
       page('平台账号管理', 'platform-accounts', () => import('@/views/Content/PlatformAccountsPage.vue')),
       // 资源池
-      page('教程池', 'tutorial-pool', () => import('@/views/Pools/TutorialPoolPage.vue')),
-      page('话术池', 'phrase-pool', () => import('@/views/Pools/PhrasePoolPage.vue')),
-      page('SKU 快捷话术', 'quick-phrases', () => import('@/views/Pools/QuickPhrasePage.vue')),
+      // 教程+话术：新的问答 / 教程 / 快捷语 + 旧的教程池 / 话术池 / SKU 快捷话术，合在一个入口用标签切换
+      page('教程+话术', 'knowledge', () => import('@/views/Pools/KnowledgePage.vue')),
+      page('教程+话术', 'tutorial-pool', () => import('@/views/Pools/KnowledgePage.vue'), { props: { tab: 'tutorial-pool' } }),
+      page('教程+话术', 'phrase-pool', () => import('@/views/Pools/KnowledgePage.vue'), { props: { tab: 'phrase-pool' } }),
+      page('教程+话术', 'quick-phrases', () => import('@/views/Pools/KnowledgePage.vue'), { props: { tab: 'quick-phrases' } }),
       page('平台标签池', 'platform-tag-pool', () => import('@/views/Pools/PlatformTagPoolPage.vue')),
       page('渠道池', 'channel-tag-pool', () => import('@/views/Pools/ChannelTagPoolPage.vue')),
       page('美金代付价格池', 'usd-proxy-price-pool', () => import('@/views/Pools/UsdProxyPricePoolPage.vue')),

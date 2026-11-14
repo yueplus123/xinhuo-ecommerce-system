@@ -133,12 +133,6 @@ mark{background:color-mix(in srgb,var(--gold) 45%,transparent);color:inherit;bor
   <div id="app"><div class="card notice">加载中…</div></div>
 </div>
 
-<div class="mask hidden" id="mask"></div>
-<div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
-  <div class="mh"><h3 id="mTitle"></h3><button class="mx" data-close aria-label="关闭">×</button></div>
-  <div class="mb" id="mBody"></div>
-  <div class="mf" id="mFoot"></div>
-</div>
 <div class="toast hidden" id="toast"></div>
 
 <script>
@@ -211,9 +205,7 @@ function byLetter(a, b){
 }
 
 // ================= 状态 =================
-// 管理模式：/knowledge.html?manage=1（职员端「教程+话术管理」，只给超级管理员 / 老板 / CEO）
-// 普通页面只能看和复制；新增、修改、删除都在管理模式里做
-var MANAGE = /[?&]manage=1\b/.test(location.search);
+// 这一页只能看和复制；新增、编辑、删除在管理后台「教程+话术」（/admin/knowledge）
 var KINDS=[['faq','问答'],['tutorial','教程'],['phrase','快捷语']];
 var KLABEL={faq:'问答', tutorial:'教程', phrase:'快捷语'};
 var S={platforms:[], entries:[], canEdit:false, canDelete:false, pid:null, kind:'faq', pq:'', q:''};
@@ -223,7 +215,6 @@ function entriesOf(pid, kind){ return S.entries.filter(function(e){ return e.pla
 function countOf(pid){ return entriesOf(pid).length; }
 function byId(id){ return S.entries.filter(function(x){ return x.id===id; })[0]; }
 function attOf(e){ return (e.tutorials||[]).map(byId).filter(function(t){ return t && t.kind==='tutorial'; }); }
-function editBtn(e){ return MANAGE && S.canEdit ? '<button class="btn sm" data-edit="'+e.id+'">编辑</button>' : ''; }
 function textOf(e){
   if (e.kind==='tutorial') return e.title+'\n🔗 '+e.url;
   var s=(e.content||'').trim(), a=attOf(e);
@@ -245,9 +236,7 @@ function writeHash(){ var h='#/p/'+(S.pid==null?0:S.pid)+'/'+S.kind; if (locatio
 function render(){
   $('qx').classList.toggle('hidden', !S.q);
   var side='<nav class="card side" aria-label="平台"><input id="pq" placeholder="找平台…" value="'+esc(S.pq)+'" autocomplete="off"><div class="plist" id="plist">'+platList()+'</div></nav>';
-  if (MANAGE && !S.canEdit){ $('app').innerHTML='<div class="card notice">只有超级管理员、老板、CEO 可以管理教程+话术。</div>'; return; }
-  var bar = MANAGE ? '<section class="card" style="padding:10px 14px;margin-bottom:14px;border-left:4px solid var(--gold);font-size:14px">🛠 管理模式：可以新增、编辑、删除。改完后，所有同事在「教程+话术」里马上就能看到。</section>' : '';
-  $('app').innerHTML=bar+'<div class="lay">'+side+'<div class="main">'+(S.q.trim()?searchView():platView())+'</div></div>';
+  $('app').innerHTML='<div class="lay">'+side+'<div class="main">'+(S.q.trim()?searchView():platView())+'</div></div>';
   var on=document.querySelector('.plist .on'); if (on && on.scrollIntoView) on.scrollIntoView({block:'nearest', inline:'nearest'});
 }
 function platList(){
@@ -273,7 +262,7 @@ function itemHtml(e, opt){
     return '<div class="card it tut"><div class="hd">'+kp+'<div class="q">📄 '+hl(e.title)+'</div>'+where+'</div>'
       + (e.content?'<div class="desc">'+hl(e.content)+'</div>':'')
       + '<div class="url" title="'+esc(e.url)+'">🔗 '+esc(shortUrl(e.url))+'</div>'
-      + '<div class="ft"><span class="spacer"></span><button class="btn sm primary" data-copy="'+e.id+'">复制</button>'+editBtn(e)+'</div></div>';
+      + '<div class="ft"><span class="spacer"></span><button class="btn sm primary" data-copy="'+e.id+'">复制</button></div></div>';
   }
   var body='<div class="body">'+(q?highlight(e.content,q):linkify(e.content))+'</div>';
   var att=attOf(e), atth = att.length ? '<div class="att"><span class="lb">附带教程</span>'+att.map(function(t){ return '<a href="'+esc(t.url)+'" target="_blank" rel="noopener" title="'+esc(t.url)+'">📄 '+esc(t.title)+'</a>'; }).join('')+'</div>' : '';
@@ -282,17 +271,17 @@ function itemHtml(e, opt){
   if (e.kind==='faq'){
     return '<div class="card it faq"><div class="hd">'+kp+'<div class="q"><span class="qm">问</span>'+hl(e.title)+'</div>'+where+'</div>'
       + body + atth
-      + '<div class="ft">'+copyTip+'<span class="meta">'+esc(meta)+'</span><span class="spacer"></span><button class="btn sm primary" data-copy="'+e.id+'">'+copyLabel+'</button>'+editBtn(e)+'</div></div>';
+      + '<div class="ft">'+copyTip+'<span class="meta">'+esc(meta)+'</span><span class="spacer"></span><button class="btn sm primary" data-copy="'+e.id+'">'+copyLabel+'</button></div></div>';
   }
   return '<div class="card it phr"><div class="hd">'+kp+'<div class="q" style="font-size:14px">💬 '+hl(e.title)+'</div>'+where+'</div>'
     + body + atth
-    + '<div class="ft">'+copyTip+'<span class="meta">'+esc(meta)+'</span><span class="spacer"></span><button class="btn sm primary" data-copy="'+e.id+'">'+copyLabel+'</button>'+editBtn(e)+'</div></div>';
+    + '<div class="ft">'+copyTip+'<span class="meta">'+esc(meta)+'</span><span class="spacer"></span><button class="btn sm primary" data-copy="'+e.id+'">'+copyLabel+'</button></div></div>';
 }
 function fmt(ms){ var d=new Date(ms); return (d.getMonth()+1)+'/'+d.getDate()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
 function platView(){
   var p=S.pid==null?null:PMAP[S.pid];
   var name=pname(S.pid);
-  var h='<section class="card ph"><div class="tt"><h2>'+esc(name)+'</h2>'+(p&&p.status==='off_sale'?'<span class="pill" style="background:var(--red-soft);color:var(--red)">禁售</span>':'')+(S.pid==null?'<span class="sub">所有平台都适用的内容，比如下单多久、能不能退款</span>':'')+(MANAGE&&S.canEdit?'<span class="spacer"></span><button class="btn primary" data-add="1">＋ 新增'+KLABEL[S.kind]+'</button>':'')+'</div>'
+  var h='<section class="card ph"><div class="tt"><h2>'+esc(name)+'</h2>'+(p&&p.status==='off_sale'?'<span class="pill" style="background:var(--red-soft);color:var(--red)">禁售</span>':'')+(S.pid==null?'<span class="sub">所有平台都适用的内容，比如下单多久、能不能退款</span>':'')+'</div>'
     + '<div class="tabs" role="tablist">'+KINDS.map(function(k){ return '<button class="tab'+(S.kind===k[0]?' on':'')+'" role="tab" aria-selected="'+(S.kind===k[0])+'" data-kind="'+k[0]+'">'+k[1]+' <b>'+entriesOf(S.pid,k[0]).length+'</b></button>'; }).join('')+'</div></section>';
   var list=entriesOf(S.pid, S.kind);
   if (!list.length){
@@ -325,61 +314,6 @@ function searchView(){
   return h+'<div class="list">'+res.slice(0,100).map(function(r){ return itemHtml(r.e,{q:S.q,showPlat:true,showKind:true}); }).join('')+'</div>';
 }
 
-// ================= 新增 / 编辑 =================
-var ED=null;
-function openEdit(id){
-  var e=id?S.entries.filter(function(x){ return x.id===id; })[0]:null;
-  ED = e ? Object.assign({}, e, {tutorials:(e.tutorials||[]).slice()}) : {id:null, platform_id:S.pid, kind:S.kind, title:(S.q.trim()&&!id?S.q.trim():''), content:'', url:'', tutorials:[]};
-  $('mTitle').textContent = e?'编辑':'新增';
-  var popts='<option value="">通用（所有平台）</option>'+S.platforms.map(function(p){ return '<option value="'+p.id+'"'+(ED.platform_id===p.id?' selected':'')+'>'+esc(p.name)+(p.status==='off_sale'?'（禁售）':'')+'</option>'; }).join('');
-  $('mBody').innerHTML='<div class="frow"><div class="fld"><label for="ep">平台</label><select id="ep">'+popts+'</select></div>'
-    + '<div class="fld"><label for="ek">类型</label><select id="ek">'+KINDS.map(function(k){ return '<option value="'+k[0]+'"'+(ED.kind===k[0]?' selected':'')+'>'+k[1]+'</option>'; }).join('')+'</select></div></div>'
-    + '<div class="fld"><label for="et" id="elt"></label><input id="et" value="'+esc(ED.title)+'"></div>'
-    + '<div class="fld" id="fu"><label for="eu">教程链接</label><input id="eu" value="'+esc(ED.url)+'" placeholder="https://"></div>'
-    + '<div class="fld" id="fc"><label for="ec" id="elc"></label><textarea id="ec">'+esc(ED.content)+'</textarea></div>'
-    + '<div class="fld" id="ft"><label>附带教程（复制时自动加在后面，同一篇教程只需要在「教程」里维护一份）</label><div class="tpick" id="etp"></div></div>'
-    + '<div class="err" id="eerr"></div>';
-  $('mFoot').innerHTML=(e&&S.canDelete?'<button class="btn danger" id="eDel">删除</button>':'')+'<span class="spacer"></span><button class="btn" data-close>取消</button><button class="btn primary" id="eSave">保存</button>';
-  kindFields();
-  $('mask').classList.remove('hidden'); $('modal').classList.remove('hidden');
-  setTimeout(function(){ $('et').focus(); },20);
-}
-function kindFields(){
-  var k=$('ek').value;
-  $('elt').textContent = k==='faq'?'客户的问题':k==='tutorial'?'教程名称':'标题（给同事看，可不填）';
-  $('et').placeholder = k==='faq'?'比如：币多久过期？':k==='tutorial'?'比如：fanbox取消次月自动扣款教程':'比如：账号交付注意';
-  $('elc').textContent = k==='faq'?'答案（复制给客户的内容）':'快捷语内容（复制给客户的内容）';
-  if (k==='tutorial'){ $('elc').textContent='说明（给同事看：什么时候发这篇，可不填）'; }
-  $('fu').classList.toggle('hidden', k!=='tutorial');
-  $('ft').classList.toggle('hidden', k==='tutorial');
-  $('ec').style.height = k==='tutorial' ? '70px' : '';
-  renderPick();
-}
-function renderPick(){
-  if (!ED) return;
-  var pid=$('ep').value ? +$('ep').value : null;
-  var list=S.entries.filter(function(t){ return t.kind==='tutorial' && (t.platform_id===pid || t.platform_id==null || ED.tutorials.indexOf(t.id)>=0); });
-  list.sort(function(a,b){ return (ED.tutorials.indexOf(b.id)>=0)-(ED.tutorials.indexOf(a.id)>=0); });
-  $('etp').innerHTML = list.length ? list.map(function(t){ return '<label><input type="checkbox" data-tp="'+t.id+'"'+(ED.tutorials.indexOf(t.id)>=0?' checked':'')+'> 📄 '+esc(t.title)+(t.platform_id!==pid?' <span class="sub">（'+esc(pname(t.platform_id))+'）</span>':'')+'</label>'; }).join('') : '<span class="sub">这个平台还没有教程，先到「教程」里加</span>';
-}
-function closeModal(){ $('mask').classList.add('hidden'); $('modal').classList.add('hidden'); ED=null; }
-function saveEdit(){
-  var body={platform_id: $('ep').value ? +$('ep').value : null, kind:$('ek').value, title:$('et').value.trim(), content: $('ec').value, url: $('ek').value==='tutorial' ? $('eu').value.trim() : '', tutorials: $('ek').value==='tutorial' ? [] : ED.tutorials.slice()};
-  var btn=$('eSave'); btn.disabled=true; $('eerr').textContent='';
-  var req = ED.id ? send('PATCH','/knowledge/'+ED.id+'/',body) : send('POST','/knowledge/',body);
-  req.then(function(saved){
-    if (ED && ED.id) S.entries=S.entries.map(function(x){ return x.id===saved.id?saved:x; }); else S.entries.push(saved);
-    S.pid=saved.platform_id; S.kind=saved.kind; if (S.q && !ED.id){ S.q=''; $('q').value=''; }
-    closeModal(); writeHash(); render(); toast('已保存');
-  }).catch(function(err){ btn.disabled=false; $('eerr').textContent=err.message; });
-}
-function delEdit(btn){
-  if (!btn._sure){ btn._sure=true; btn.textContent='再点一次确认删除'; return; }
-  var id=ED.id;
-  call('/knowledge/'+id+'/',{method:'DELETE'}).then(function(){ S.entries=S.entries.filter(function(x){ return x.id!==id; }); closeModal(); render(); toast('已删除'); })
-    .catch(function(err){ $('eerr').textContent=err.message; });
-}
-
 // ================= 事件 =================
 document.addEventListener('click', function(ev){
   var t=ev.target.closest('button'); if (!t || t.disabled) return; var d=t.dataset;
@@ -388,29 +322,12 @@ document.addEventListener('click', function(ev){
   else if (d.copy){ var e=S.entries.filter(function(x){ return x.id===+d.copy; })[0]; if (e) copy(textOf(e)); }
   else if (d.copyall){ var list=entriesOf(S.pid,'tutorial'); copy(pname(S.pid)+' 相关教程：\n'+list.map(function(e,i){ return (i+1)+'. '+textOf(e); }).join('\n'), '已复制 '+list.length+' 篇教程'); }
   else if (d.more){ OPEN[+d.more]=!OPEN[+d.more]; render(); }
-  else if (d.edit) openEdit(+d.edit);
-  else if (d.add || t.id==='addBtn') openEdit(null);
-  else if (d.close!==undefined) closeModal();
-  else if (t.id==='eSave') saveEdit();
-  else if (t.id==='eDel') delEdit(t);
   else if (t.id==='qx'){ S.q=''; $('q').value=''; render(); $('q').focus(); }
-});
-$('mask').addEventListener('click', closeModal);
-document.addEventListener('change', function(ev){
-  var t=ev.target;
-  if (t.id==='ek') kindFields();
-  else if (t.id==='ep') renderPick();
-  else if (t.dataset && t.dataset.tp && ED){ var id=+t.dataset.tp, i=ED.tutorials.indexOf(id); if (t.checked && i<0) ED.tutorials.push(id); if (!t.checked && i>=0) ED.tutorials.splice(i,1); }
 });
 document.addEventListener('input', function(ev){
   var t=ev.target;
   if (t.id==='q'){ S.q=t.value; render(); }
   else if (t.id==='pq'){ S.pq=t.value; $('plist').innerHTML=platList(); }
-});
-document.addEventListener('keydown', function(ev){
-  if ((ev.ctrlKey||ev.metaKey) && (ev.key==='k'||ev.key==='K')){ ev.preventDefault(); $('q').focus(); $('q').select(); return; }
-  if (ev.key==='/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){ ev.preventDefault(); $('q').focus(); return; }
-  if (ev.key==='Escape'){ if (!$('modal').classList.contains('hidden')) closeModal(); else if (document.activeElement===$('q') && S.q){ S.q=''; $('q').value=''; render(); } }
 });
 
 // ================= 启动 =================

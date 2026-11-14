@@ -36,8 +36,8 @@ cd admin && pnpm install && pnpm run dev           # http://localhost:5174/admin
 2. 保留并备份 `backend/data/` 与 `backend/media/`。
 3. 后端：`sudo bash deploy.sh --install-service`（gunicorn 监听 `127.0.0.1:8001`）。
 4. 构建前端并上传：
-   - `cd frontend && pnpm run build:pro`，把 `dist-pro/` 放到服务器 `frontend/dist/`
-   - `cd admin && pnpm run build:fast`，把 `dist/` 放到服务器 `admin/dist/`
+   - 都由 GitHub Actions 打包（服务器不打包）：职员端 → `frontend-dist` 分支，管理后台 → `admin-dist` 分支
+   - 服务器上拉取替换：`bash scripts/deploy_frontend.sh`（职员端）、`bash scripts/deploy_admin.sh`（管理后台）
 5. 用 `deploy/nginx-xinhuo.conf.example` 配置 Nginx：`/` → 职员端，`/admin/` → 管理后台，`/api/` → 后端。
 
 部署脚本会在迁移前使用 SQLite 在线备份 API 将数据库保存到 `backups/`，不会删除或重建现有数据库。Docker 容器启动时不会自动迁移数据库，避免未经确认修改生产库。

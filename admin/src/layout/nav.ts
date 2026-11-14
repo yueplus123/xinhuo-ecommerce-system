@@ -31,9 +31,13 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     name: '资源池',
     items: [
-      { title: '教程池', desc: '机器人与 SKU 共用的教程', path: '/tutorial-pool', icon: 'Reading' },
-      { title: '话术池', desc: '可复用的客服话术', path: '/phrase-pool', icon: 'ChatLineSquare' },
-      { title: 'SKU 快捷话术', desc: '按 SKU 查看 / 维护快捷话术', path: '/quick-phrases', icon: 'ChatDotSquare' },
+      {
+        title: '教程+话术',
+        desc: '按平台管理 问答 / 教程 / 快捷语（职员端「教程+话术」的内容）；旧的教程池、话术池、SKU 快捷话术也在这里',
+        path: '/knowledge',
+        icon: 'Notebook',
+        children: ['/tutorial-pool', '/phrase-pool', '/quick-phrases']
+      },
       { title: '平台标签池', desc: '平台的标签选项', path: '/platform-tag-pool', icon: 'PriceTag' },
       { title: '渠道池', desc: 'SKU 的渠道标签选项', path: '/channel-tag-pool', icon: 'Share' },
       { title: '美金代付价格池', desc: '按美金区间的代付费率', path: '/usd-proxy-price-pool', icon: 'Coin' }
