@@ -44,6 +44,8 @@ jobs:
         working-directory: frontend
         env:
           VITE_USE_BUNDLE_ANALYZER: "false"
+          # GitHub 机器有 7G 内存；Node 默认堆只有约 2G，打包偶尔会内存不够
+          NODE_OPTIONS: "--max-old-space-size=6144"
         run: pnpm run build:pro
 
       - name: 发布到 frontend-dist 分支
