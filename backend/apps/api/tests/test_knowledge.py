@@ -125,3 +125,22 @@ class SeedKnowledgeTests(TestCase):
         n = KnowledgeEntry.objects.count()
         self.run_cmd("--apply")
         self.assertEqual(KnowledgeEntry.objects.count(), n)  # 再跑一次不会重复
+
+
+class SeedKnowledgeNamingTests(TestCase):
+    """教程名用教程池里的；同一平台同名不同链接的教程只放一条。"""
+
+    def test_pool_name_and_same_name_dedupe(self):
+        p = Platform.objects.create(name="chatgpt")
+        b = Business.objects.create(platform=p, name="开visa卡付GPT")
+        s = SKU.objects.create(business=b, name="独享卡", tutorial_text="独享卡支付教程")
+        TutorialPool.objects.create(name="独享卡支付教程", detail_url="https://x.feishu.cn/docx/AAA")
+        TutorialPool.objects.create(name="下载教程", detail_url="https://x.feishu.cn/docx/DL")
+        QuickPhrase.objects.create(sku=s, content="1️⃣请按教程操作 独享卡支付教程 🔗https://x.feishu.cn/docx/BBB")
+        QuickPhrase.objects.create(sku=s, content="商品已经发到您的邮箱 请查收下载教程 https://x.feishu.cn/docx/DL")
+        call_command("seed_knowledge_base", "--apply", stdout=StringIO())
+        tu = KnowledgeEntry.objects.filter(kind="tutorial", platform=p)
+        self.assertEqual(sorted(tu.values_list("title", flat=True)), ["下载教程", "独享卡支付教程"])
+        self.assertEqual(tu.get(title="独享卡支付教程").url, "https://x.feishu.cn/docx/AAA")  # 用档位引用的那个链接
+        ph = KnowledgeEntry.objects.get(kind="phrase", content__startswith="1️⃣")
+        self.assertEqual(ph.tutorials, [tu.get(title="独享卡支付教程").id])

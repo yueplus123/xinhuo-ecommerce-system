@@ -106,7 +106,9 @@ def _split_phrase(text: str, pool_by_url: dict, pool_names: list[str]):
             cut = idx if idx >= 0 else start
         else:
             name = seg.strip() or (known or "")
-        name = (known if known and not name else name).strip() or "教程"
+        if known:
+            name = known  # 教程池里有这个链接：一律用教程池里的名字
+        name = (name or "").strip() or "教程"
         tuts.append((name, url))
         prev = end
     notes = text[:cut]
@@ -138,12 +140,21 @@ def plan():
     tut_rows, phr_rows, missing, used = [], [], [], set()
     for p in Platform.objects.order_by("sort_order", "id"):
         tuts: OrderedDict[str, tuple] = OrderedDict()   # 链接 -> (名称, 链接)
+        alias: dict[str, str] = {}  # 同名教程的其他链接 -> 采用的链接
         phrases: OrderedDict[str, dict] = OrderedDict()
+
+        tut_names: dict[str, str] = {}  # 名称 -> 链接 key
 
         def add_tut(name, url):
             k = _norm_url(url)
+            nk = _norm(name)
+            if nk in tut_names and tut_names[nk] != k:
+                # 同名不同链接：沿用第一个，话术里的附带教程也指向它
+                alias[k] = tut_names[nk]
+                k = tut_names[nk]
             if k not in tuts:
                 tuts[k] = (name, url)
+                tut_names.setdefault(nk, k)
             used.add(name)
             used.add(pool_by_url.get(k, ""))
 
@@ -166,7 +177,8 @@ def plan():
                 d = phrases.setdefault(_norm_text(notes), {"notes": notes, "biz": [], "links": OrderedDict()})
                 d["biz"].append(s.business.name)
                 for name, url in links:
-                    d["links"].setdefault(_norm_url(url), (pool_by_url.get(_norm_url(url)) or name, url))
+                    k = alias.get(_norm_url(url), _norm_url(url))
+                    d["links"].setdefault(k, (pool_by_url.get(k) or name, tuts[k][1] if k in tuts else url))
 
         for k, (name, url) in tuts.items():
             if (p.id, k) in have_tut or (p.id, "name:" + _norm(name)) in have_tut:
