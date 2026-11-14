@@ -352,6 +352,26 @@ if (EMBED){ document.getElementById('backSys').classList.add('hidden'); }
 function boot(PAYLOAD){
 var META = Array.isArray(PAYLOAD) ? {platforms:PAYLOAD} : PAYLOAD;
 var DATA = META.platforms, USD_TIERS = META.usd_proxy_tiers||[];
+// 按首字母排序：英文取第一个字母，汉字按拼音取首字母（A-Z），同一个字母里再按拼音/字母顺序
+var PY_COLL = (function(){ try{ return new Intl.Collator('zh-Hans-CN-u-co-pinyin',{sensitivity:'base',numeric:true}); }catch(e){ return null; } })();
+var PY_BOUND = '阿芭擦搭蛾发噶哈击喀垃妈拿哦啪期然撒塌挖昔压匝', PY_LET = 'ABCDEFGHJKLMNOPQRSTWXYZ';
+function firstLetter(name){
+  var c = String(name||'').trim().charAt(0);
+  if (/[a-z]/i.test(c)) return c.toUpperCase();
+  if (/[0-9]/.test(c)) return '#';
+  if (PY_COLL && /[一-鿿]/.test(c)){
+    var L='#';
+    for (var i=0;i<PY_BOUND.length;i++){ if (PY_COLL.compare(c, PY_BOUND.charAt(i))>=0) L=PY_LET.charAt(i); else break; }
+    return L;
+  }
+  return '#';
+}
+function byLetter(a, b){
+  var la=firstLetter(a), lb=firstLetter(b);
+  if (la!==lb) return la==='#' ? 1 : lb==='#' ? -1 : (la<lb?-1:1);
+  return PY_COLL ? PY_COLL.compare(a,b) : String(a).localeCompare(String(b));
+}
+DATA.sort(function(x,y){ return byLetter(x.name, y.name); });
 var STATUS = {on_sale:'在售', off_sale:'禁售', pending_test:'待测试'};
 var PLACEHOLDER = 100000;
 var st = {p:0, b:-1, s:0, img:0, kw:'', fs:''};

@@ -1,9 +1,11 @@
 """教程+话术（知识库）接口，给职员端 public/knowledge.html 使用。
 
-GET    /api/knowledge/        全部平台 + 全部条目（游客也可看）
-POST   /api/knowledge/        新增（职员）
-PATCH  /api/knowledge/<id>/   修改（职员）
-DELETE /api/knowledge/<id>/   删除（超级管理员 / 老板 / CEO）
+GET    /api/knowledge/        全部平台 + 全部条目（职员、游客都能看）
+POST   /api/knowledge/        新增（超级管理员 / 老板 / CEO）
+PATCH  /api/knowledge/<id>/   修改（同上）
+DELETE /api/knowledge/<id>/   删除（同上）
+
+普通页面只能看和复制；新增、修改、删除在「教程+话术管理」（knowledge.html?manage=1）里做。
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ def _entry(e: KnowledgeEntry) -> dict:
         "title": e.title,
         "content": e.content,
         "url": e.url,
+        "tutorials": [int(x) for x in (e.tutorials or []) if str(x).isdigit()],
         "sort_order": e.sort_order,
         "updated_at": int(e.updated_at.timestamp() * 1000) if e.updated_at else None,
         "updated_by": _name(e.updated_by),
@@ -66,6 +69,18 @@ def _clean(data: dict, entry: KnowledgeEntry | None = None) -> tuple[dict, str |
             if len(v) > limit:
                 return {}, f"内容太长（最多 {limit} 字）"
             out[f] = v
+    if "tutorials" in data:
+        raw = data.get("tutorials") or []
+        if not isinstance(raw, list):
+            return {}, "附带教程格式不对"
+        try:
+            ids = list(dict.fromkeys(int(x) for x in raw))
+        except (TypeError, ValueError):
+            return {}, "附带教程格式不对"
+        ok = set(KnowledgeEntry.objects.filter(pk__in=ids, kind=KnowledgeEntry.KIND_TUTORIAL).values_list("id", flat=True))
+        if len(ok) != len(ids):
+            return {}, "附带的教程有的已经不存在了，请刷新后重新勾选"
+        out["tutorials"] = ids
     if "sort_order" in data:
         try:
             out["sort_order"] = max(0, int(data.get("sort_order") or 0))
@@ -92,13 +107,15 @@ def _clean(data: dict, entry: KnowledgeEntry | None = None) -> tuple[dict, str |
             URLValidator(schemes=["http", "https"])(url)
         except ValidationError:
             return {}, "链接格式不对，要以 http:// 或 https:// 开头"
+    if kind == KnowledgeEntry.KIND_TUTORIAL:
+        out["tutorials"] = []
     if kind in (KnowledgeEntry.KIND_FAQ, KnowledgeEntry.KIND_PHRASE) and not content:
         return {}, "请填写答案" if kind == KnowledgeEntry.KIND_FAQ else "请填写快捷语内容"
     return out, None
 
 
 def _can_edit(user) -> bool:
-    return bool(user and user.is_authenticated and user.is_staff and not is_guest(user))
+    return is_manager(user) and not is_guest(user)
 
 
 class KnowledgeListAPIView(APIView):
@@ -120,7 +137,7 @@ class KnowledgeListAPIView(APIView):
 
     def post(self, request):
         if not _can_edit(request.user):
-            return Response({"detail": "游客不能修改"}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "只有超级管理员 / 老板 / CEO 可以新增"}, status=status.HTTP_403_FORBIDDEN)
         fields, err = _clean(request.data or {})
         if err:
             return Response({"detail": err}, status=status.HTTP_400_BAD_REQUEST)
@@ -136,7 +153,7 @@ class KnowledgeDetailAPIView(APIView):
 
     def patch(self, request, pk):
         if not _can_edit(request.user):
-            return Response({"detail": "游客不能修改"}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "只有超级管理员 / 老板 / CEO 可以修改"}, status=status.HTTP_403_FORBIDDEN)
         e = self._get(pk)
         if not e:
             return Response({"detail": "这条内容已经不存在了"}, status=status.HTTP_404_NOT_FOUND)
@@ -150,10 +167,16 @@ class KnowledgeDetailAPIView(APIView):
         return Response(_entry(e))
 
     def delete(self, request, pk):
-        if not is_manager(request.user):
-            return Response({"detail": "只有老板 / CEO / 管理员可以删除"}, status=status.HTTP_403_FORBIDDEN)
+        if not _can_edit(request.user):
+            return Response({"detail": "只有超级管理员 / 老板 / CEO 可以删除"}, status=status.HTTP_403_FORBIDDEN)
         e = self._get(pk)
         if not e:
             return Response(status=status.HTTP_204_NO_CONTENT)
+        if e.kind == KnowledgeEntry.KIND_TUTORIAL:
+            # 删掉教程时，把问答 / 快捷语里带着它的引用一起去掉
+            for other in KnowledgeEntry.objects.exclude(pk=e.pk).exclude(kind=KnowledgeEntry.KIND_TUTORIAL):
+                if e.pk in (other.tutorials or []):
+                    other.tutorials = [x for x in other.tutorials if x != e.pk]
+                    other.save(update_fields=["tutorials", "updated_at"])
         e.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

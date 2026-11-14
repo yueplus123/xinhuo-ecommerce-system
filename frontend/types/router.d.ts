@@ -47,6 +47,8 @@ interface RouteMetaCustom extends Record<string | number | symbol, unknown> {
   permission?: string[]
   requiresCeo?: boolean
   requiresSuperuser?: boolean
+  /** 只给超级管理员 / 老板 / CEO（例如 教程+话术管理） */
+  requiresManager?: boolean
   guestAllowed?: boolean
   public?: boolean
   /** 侧栏分组：同组共用浅色底与文字色 */

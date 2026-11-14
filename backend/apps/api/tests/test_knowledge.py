@@ -27,24 +27,33 @@ class KnowledgeApiTests(TestCase):
         c.force_authenticate(u)
         return c
 
-    def test_crud(self):
-        r = self.c(self.staff).post("/api/knowledge/", {"platform_id": self.p.id, "kind": "faq", "title": "币多久过期？",
-                                                         "content": "180 天"}, format="json")
-        self.assertEqual(r.status_code, 201, r.data)
-        eid = r.data["id"]
+    def test_staff_read_only_manager_edits(self):
+        self.assertEqual(self.c(self.staff).post("/api/knowledge/", {"kind": "faq", "title": "x", "content": "y"},
+                                                 format="json").status_code, 403)
         r = self.c(self.staff).get("/api/knowledge/")
-        self.assertEqual(len(r.data["entries"]), 1)
-        self.assertTrue(r.data["can_edit"])
-        self.assertFalse(r.data["can_delete"])
-        self.assertEqual(r.data["platforms"][0]["name"], "Fanbox")
-        r = self.c(self.staff).patch(f"/api/knowledge/{eid}/", {"content": "180 天（6 个月）"}, format="json")
-        self.assertEqual(r.data["content"], "180 天（6 个月）")
+        self.assertFalse(r.data["can_edit"])
+        c = self.c(self.boss)
+        t = c.post("/api/knowledge/", {"platform_id": self.p.id, "kind": "tutorial", "title": "取消扣款教程",
+                                        "url": "https://a.example/t", "content": "不想续费的客户"}, format="json")
+        self.assertEqual(t.status_code, 201, t.data)
+        r = c.post("/api/knowledge/", {"platform_id": self.p.id, "kind": "faq", "title": "怎么取消扣款？",
+                                        "content": "按教程操作：", "tutorials": [t.data["id"]]}, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data["tutorials"], [t.data["id"]])
+        eid = r.data["id"]
+        self.assertTrue(c.get("/api/knowledge/").data["can_edit"])
+        r = c.patch(f"/api/knowledge/{eid}/", {"content": "按下面的教程操作："}, format="json")
+        self.assertEqual(r.data["content"], "按下面的教程操作：")
+        self.assertEqual(self.c(self.staff).patch(f"/api/knowledge/{eid}/", {"content": "z"}, format="json").status_code, 403)
         self.assertEqual(self.c(self.staff).delete(f"/api/knowledge/{eid}/").status_code, 403)
-        self.assertEqual(self.c(self.boss).delete(f"/api/knowledge/{eid}/").status_code, 204)
+        # 删掉教程：带着它的问答里的引用也一起去掉
+        self.assertEqual(c.delete(f"/api/knowledge/{t.data['id']}/").status_code, 204)
+        self.assertEqual(KnowledgeEntry.objects.get(pk=eid).tutorials, [])
+        self.assertEqual(c.delete(f"/api/knowledge/{eid}/").status_code, 204)
         self.assertFalse(KnowledgeEntry.objects.exists())
 
     def test_validation(self):
-        c = self.c(self.staff)
+        c = self.c(self.boss)
         self.assertEqual(c.post("/api/knowledge/", {"kind": "tutorial", "title": "x"}, format="json").status_code, 400)
         self.assertEqual(c.post("/api/knowledge/", {"kind": "tutorial", "title": "x", "url": "javascript:alert(1)"},
                                 format="json").status_code, 400)
@@ -52,10 +61,15 @@ class KnowledgeApiTests(TestCase):
         self.assertEqual(c.post("/api/knowledge/", {"kind": "bad", "title": "x"}, format="json").status_code, 400)
         self.assertEqual(c.post("/api/knowledge/", {"kind": "faq", "title": "x", "content": "y", "platform_id": 999},
                                 format="json").status_code, 400)
+        self.assertEqual(c.post("/api/knowledge/", {"kind": "faq", "title": "x", "content": "y", "tutorials": [999]},
+                                format="json").status_code, 400)
         r = c.post("/api/knowledge/", {"kind": "phrase", "content": "请尽快登录核对"}, format="json")
         self.assertEqual(r.status_code, 201)
         self.assertEqual(r.data["title"], "请尽快登录核对")  # 快捷语没写标题就用内容开头
         self.assertIsNone(r.data["platform_id"])  # 通用
+        # 附带教程只能选教程
+        self.assertEqual(c.post("/api/knowledge/", {"kind": "faq", "title": "x", "content": "y",
+                                                     "tutorials": [r.data["id"]]}, format="json").status_code, 400)
 
     def test_guest_read_only(self):
         self.assertEqual(self.c(self.guest).get("/api/knowledge/").status_code, 200)
@@ -72,9 +86,11 @@ class SeedKnowledgeTests(TestCase):
         s1 = SKU.objects.create(business=b1, name="美区", tutorial_text="苹果登录教程 / 改密码教程")
         s2 = SKU.objects.create(business=b1, name="日区", tutorial_text="苹果登录教程")
         s3 = SKU.objects.create(business=b2, name="共享", tutorial_text="没有链接的教程")
+        text = "1️⃣尽量不要换ip登录 2️⃣尽快登录核对 苹果登录教程 🔗https://a.example/login?x=1 改密码教程 🔗 https://a.example/pw"
         for s in (s1, s2, s3):
-            QuickPhrase.objects.create(sku=s, content="1️⃣尽量不要换ip登录\n2️⃣尽快改密码")
-        QuickPhrase.objects.create(sku=s1, content="美区专属提醒")
+            QuickPhrase.objects.create(sku=s, content=text)
+        QuickPhrase.objects.create(sku=s1, content="美区专属提醒，设置页 https://appleid.apple.com/ 可以改")
+        QuickPhrase.objects.create(sku=s2, content="日区提醒 新教程 🔗https://b.example.feishu.cn/docx/abc")
         TutorialPool.objects.create(name="苹果登录教程", detail_url="https://a.example/login")
         TutorialPool.objects.create(name="改密码教程", detail_url="https://a.example/pw")
         TutorialPool.objects.create(name="没人用的教程", detail_url="https://a.example/unused")
@@ -90,14 +106,21 @@ class SeedKnowledgeTests(TestCase):
         self.assertIn("没有链接的教程", out)
         self.assertFalse(KnowledgeEntry.objects.exists())
 
-    def test_apply_dedupes_and_is_idempotent(self):
+    def test_apply_splits_dedupes_and_is_idempotent(self):
         self.run_cmd("--apply")
-        ph = KnowledgeEntry.objects.filter(kind="phrase")
-        self.assertEqual(ph.count(), 2)  # 三个档位相同的话术只放一条
-        self.assertTrue(ph.filter(title__contains="苹果id、共享苹果id").exists())
         tu = KnowledgeEntry.objects.filter(kind="tutorial")
-        self.assertEqual(set(tu.filter(platform__name="apple").values_list("title", flat=True)), {"苹果登录教程", "改密码教程"})
+        self.assertEqual(set(tu.filter(platform__name="apple").values_list("title", flat=True)),
+                         {"苹果登录教程", "改密码教程", "新教程"})
         self.assertEqual(tu.get(title="没人用的教程").platform, None)  # 没被用到的放「通用」
+        ph = KnowledgeEntry.objects.filter(kind="phrase")
+        self.assertEqual(ph.count(), 3)  # 三个档位相同的话术只放一条
+        shared = ph.get(title__startswith="账号交付注意")
+        self.assertIn("苹果id、共享苹果id", shared.title)
+        self.assertEqual(shared.content, "1️⃣尽量不要换ip登录\n2️⃣尽快登录核对")  # 教程链接拆出去了，分点换行
+        self.assertEqual(sorted(KnowledgeEntry.objects.get(pk=i).title for i in shared.tutorials), ["改密码教程", "苹果登录教程"])
+        other = ph.get(content__startswith="美区专属")
+        self.assertIn("https://appleid.apple.com/", other.content)  # 普通链接留在话术里
+        self.assertEqual(other.tutorials, [])
         self.assertEqual(SKU.objects.get(name="美区").quick_phrases.count(), 2)  # 原数据不动
         n = KnowledgeEntry.objects.count()
         self.run_cmd("--apply")

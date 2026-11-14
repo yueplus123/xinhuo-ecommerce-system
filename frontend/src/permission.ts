@@ -49,6 +49,7 @@ function filterByRole(routes: AppRouteRecordRaw[], auth: ReturnType<typeof useXi
       }
       if (r.meta?.requiresCeo && !auth.isCeo) return false
       if (r.meta?.requiresSuperuser && !auth.isSuperuser) return false
+      if (r.meta?.requiresManager && !(auth.isSuperuser || auth.isBoss || auth.isCeo)) return false
       return true
     })
 }
@@ -144,6 +145,10 @@ router.beforeEach(async (to, _from, next) => {
       return
     }
     if (to.meta?.requiresSuperuser && !auth.isSuperuser) {
+      next('/data-screen')
+      return
+    }
+    if (to.meta?.requiresManager && !(auth.isSuperuser || auth.isBoss || auth.isCeo)) {
       next('/data-screen')
       return
     }

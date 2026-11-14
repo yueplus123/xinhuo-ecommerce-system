@@ -1260,8 +1260,10 @@ class KnowledgeEntry(models.Model):
     title = models.CharField(max_length=300, verbose_name="标题",
                              help_text="问答：客户的问题；教程：教程名称；快捷语：给同事看的简短标题")
     content = models.TextField(blank=True, default="", verbose_name="内容",
-                               help_text="问答：答案；快捷语：发给客户的话；教程：可留空")
+                               help_text="问答：答案；快捷语：发给客户的话；教程：说明（什么时候发，可留空）")
     url = models.URLField(max_length=1000, blank=True, default="", verbose_name="链接")
+    tutorials = models.JSONField(default=list, blank=True, verbose_name="附带教程",
+                                 help_text="问答 / 快捷语带上的教程（本表里 kind=tutorial 的 id 列表），复制时自动加在后面")
     sort_order = models.PositiveIntegerField(default=0, verbose_name="排序")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="修改时间")

@@ -74,6 +74,7 @@ a{color:var(--g)}
 .list{display:flex;flex-direction:column;gap:10px}
 .it{padding:14px;display:flex;flex-direction:column;gap:8px}
 .it .hd{display:flex;gap:8px;align-items:flex-start}
+.it .pf{margin-left:auto;flex:none;font-size:17px;font-weight:700;color:var(--red);white-space:nowrap;line-height:1.3}
 .it .q{font-size:15px;font-weight:700;line-height:1.5;flex:1;min-width:0;overflow-wrap:anywhere}
 .it .q .qm{color:var(--g);font-weight:800;margin-right:6px}
 .it .body{white-space:pre-wrap;font-size:14px;line-height:1.7;background:var(--soft);border-radius:10px;padding:10px 12px;color:var(--ink2);overflow-wrap:anywhere}
@@ -81,6 +82,19 @@ a{color:var(--g)}
 .it .ft{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .it .meta{font-size:12px;color:var(--faint)}
 .it.tut{border-left:4px solid var(--blue)}
+.it .desc{font-size:13px;color:var(--muted);line-height:1.5}
+.it .body.clamp{max-height:7.4em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 70%,transparent);mask-image:linear-gradient(#000 70%,transparent)}
+.more{border:none;background:none;color:var(--g);font-size:13px;cursor:pointer;padding:0;align-self:flex-start}
+.att{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.att .lb{font-size:12px;color:var(--faint)}
+.att a{display:inline-flex;align-items:center;gap:4px;font-size:13px;border-radius:999px;padding:3px 10px;background:var(--blue-soft);color:var(--blue);text-decoration:none;border:1px solid transparent;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att a:hover{border-color:var(--blue)}
+.used{font-size:12px;color:var(--faint)}
+.tpick{display:flex;flex-direction:column;gap:2px;max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px}
+.tpick label{display:flex;gap:8px;align-items:center;font-size:13px;padding:5px 6px;border-radius:6px;cursor:pointer}
+.tpick label:hover{background:var(--soft)}
+.fld .tpick input{width:18px;padding:0;height:18px;flex:none;margin:0}
+.it .body a{word-break:break-all}
 .it.phr{border-left:4px solid var(--gold)}
 .it.faq{border-left:4px solid var(--g)}
 .pill{display:inline-flex;align-items:center;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:600;white-space:nowrap}
@@ -115,11 +129,7 @@ mark{background:color-mix(in srgb,var(--gold) 45%,transparent);color:inherit;bor
 </head>
 <body>
 <div class="wrap">
-  <section class="card top">
-    <h1>📚 教程+话术</h1>
-    <label class="sbox">🔍<input id="q" placeholder="搜问题、教程、快捷语（所有平台）" autocomplete="off" aria-label="搜索"><button class="x hidden" id="qx" aria-label="清空">×</button><span class="kbd">Ctrl K</span></label>
-    <button class="btn primary hidden" id="addBtn">＋ 新增</button>
-  </section>
+  <input id="q" type="hidden" value=""><button id="qx" class="hidden"></button><button id="addBtn" class="hidden"></button>
   <div id="app"><div class="card notice">加载中…</div></div>
 </div>
 
@@ -152,7 +162,8 @@ function copy(text, msg){
   function fb(){ var ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); ok(); }catch(e){ toast('复制失败，请手动复制'); } ta.remove(); }
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(ok, fb); else fb();
 }
-function linkify(t){ return esc(t).replace(/(https?:\/\/[^\s<>"]+)/g,'<a href="$1" target="_blank" rel="noopener">$1</a>'); }
+function shortUrl(u){ var m=String(u).match(/^https?:\/\/([^\/?#]+)(.*)$/); if (!m) return u; var host=m[1].replace(/^www\./,''), rest=m[2]; return host+(rest.length>1?(rest.length>18?rest.slice(0,16)+'…':rest):''); }
+function linkify(t){ return esc(t).replace(/(https?:\/\/[^\s<>"]+)/g,function(u){ return '<a href="'+u+'" target="_blank" rel="noopener" title="'+u+'">'+esc(shortUrl(u.replace(/&amp;/g,'&')))+'</a>'; }); }
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
 function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 
@@ -179,7 +190,30 @@ function call(path, opts){
 }
 function send(method, path, body){ return call(path,{method:method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); }
 
+// 按首字母排序：英文取第一个字母，汉字按拼音取首字母（A-Z），同一个字母里再按拼音/字母顺序
+var PY_COLL = (function(){ try{ return new Intl.Collator('zh-Hans-CN-u-co-pinyin',{sensitivity:'base',numeric:true}); }catch(e){ return null; } })();
+var PY_BOUND = '阿芭擦搭蛾发噶哈击喀垃妈拿哦啪期然撒塌挖昔压匝', PY_LET = 'ABCDEFGHJKLMNOPQRSTWXYZ';
+function firstLetter(name){
+  var c = String(name||'').trim().charAt(0);
+  if (/[a-z]/i.test(c)) return c.toUpperCase();
+  if (/[0-9]/.test(c)) return '#';
+  if (PY_COLL && /[一-鿿]/.test(c)){
+    var L='#';
+    for (var i=0;i<PY_BOUND.length;i++){ if (PY_COLL.compare(c, PY_BOUND.charAt(i))>=0) L=PY_LET.charAt(i); else break; }
+    return L;
+  }
+  return '#';
+}
+function byLetter(a, b){
+  var la=firstLetter(a), lb=firstLetter(b);
+  if (la!==lb) return la==='#' ? 1 : lb==='#' ? -1 : (la<lb?-1:1);
+  return PY_COLL ? PY_COLL.compare(a,b) : String(a).localeCompare(String(b));
+}
+
 // ================= 状态 =================
+// 管理模式：/knowledge.html?manage=1（职员端「教程+话术管理」，只给超级管理员 / 老板 / CEO）
+// 普通页面只能看和复制；新增、修改、删除都在管理模式里做
+var MANAGE = /[?&]manage=1\b/.test(location.search);
 var KINDS=[['faq','问答'],['tutorial','教程'],['phrase','快捷语']];
 var KLABEL={faq:'问答', tutorial:'教程', phrase:'快捷语'};
 var S={platforms:[], entries:[], canEdit:false, canDelete:false, pid:null, kind:'faq', pq:'', q:''};
@@ -187,7 +221,17 @@ var PMAP={};
 function pname(id){ return id==null ? '通用' : (PMAP[id]?PMAP[id].name:'（已删除的平台）'); }
 function entriesOf(pid, kind){ return S.entries.filter(function(e){ return e.platform_id===pid && (!kind || e.kind===kind); }); }
 function countOf(pid){ return entriesOf(pid).length; }
-function textOf(e){ return e.kind==='tutorial' ? e.title+'\n🔗 '+e.url : e.content; }
+function byId(id){ return S.entries.filter(function(x){ return x.id===id; })[0]; }
+function attOf(e){ return (e.tutorials||[]).map(byId).filter(function(t){ return t && t.kind==='tutorial'; }); }
+function editBtn(e){ return MANAGE && S.canEdit ? '<button class="btn sm" data-edit="'+e.id+'">编辑</button>' : ''; }
+function textOf(e){
+  if (e.kind==='tutorial') return e.title+'\n🔗 '+e.url;
+  var s=(e.content||'').trim(), a=attOf(e);
+  if (a.length) s+='\n\n'+a.map(function(t){ return t.title+'\n🔗 '+t.url; }).join('\n');
+  return s;
+}
+function usedBy(t){ return S.entries.filter(function(e){ return (e.tutorials||[]).indexOf(t.id)>=0; }).length; }
+var OPEN={};
 
 // 地址栏：#/p/平台ID（0=通用）/类型
 function readHash(){
@@ -199,10 +243,11 @@ function writeHash(){ var h='#/p/'+(S.pid==null?0:S.pid)+'/'+S.kind; if (locatio
 
 // ================= 渲染 =================
 function render(){
-  $('addBtn').classList.toggle('hidden', !S.canEdit);
   $('qx').classList.toggle('hidden', !S.q);
   var side='<nav class="card side" aria-label="平台"><input id="pq" placeholder="找平台…" value="'+esc(S.pq)+'" autocomplete="off"><div class="plist" id="plist">'+platList()+'</div></nav>';
-  $('app').innerHTML='<div class="lay">'+side+'<div class="main">'+(S.q.trim()?searchView():platView())+'</div></div>';
+  if (MANAGE && !S.canEdit){ $('app').innerHTML='<div class="card notice">只有超级管理员、老板、CEO 可以管理教程+话术。</div>'; return; }
+  var bar = MANAGE ? '<section class="card" style="padding:10px 14px;margin-bottom:14px;border-left:4px solid var(--gold);font-size:14px">🛠 管理模式：可以新增、编辑、删除。改完后，所有同事在「教程+话术」里马上就能看到。</section>' : '';
+  $('app').innerHTML=bar+'<div class="lay">'+side+'<div class="main">'+(S.q.trim()?searchView():platView())+'</div></div>';
   var on=document.querySelector('.plist .on'); if (on && on.scrollIntoView) on.scrollIntoView({block:'nearest', inline:'nearest'});
 }
 function platList(){
@@ -213,43 +258,45 @@ function platList(){
   }
   var h='';
   if (!q || '通用'.indexOf(q)>=0) h+=btn(null,'通用（所有平台）');
-  var withC=[], without=[];
-  S.platforms.forEach(function(p){ if (q && p.name.toLowerCase().indexOf(q)<0) return; (countOf(p.id)?withC:without).push(p); });
-  h+=withC.map(function(p){ return btn(p.id,p.name,p.status); }).join('');
-  if (without.length) h+='<div class="sep">还没有内容的平台</div>'+without.map(function(p){ return btn(p.id,p.name,p.status); }).join('');
+  // 平台按首字母 A-Z 排一列（没有内容的显示成灰色）
+  h+=S.platforms.filter(function(p){ return !q || p.name.toLowerCase().indexOf(q)>=0; }).map(function(p){ return btn(p.id,p.name,p.status); }).join('');
   return h || '<div class="sub" style="padding:8px">没有这个平台</div>';
 }
 function itemHtml(e, opt){
   opt=opt||{};
   var q=opt.q||'', hl=function(t){ return q?highlight(t,q):esc(t); };
-  var acts='', meta=(e.updated_by?e.updated_by+' · ':'')+(e.updated_at?fmt(e.updated_at):'');
-  var where = opt.showPlat ? '<span class="ptag">'+esc(pname(e.platform_id))+'</span>' : '';
+  var meta=(e.updated_by?e.updated_by+' · ':'')+(e.updated_at?fmt(e.updated_at):'');
+  var where = '<span class="pf">'+esc(pname(e.platform_id))+'</span>';
   var kp = opt.showKind ? '<span class="pill k-'+e.kind+'">'+KLABEL[e.kind]+'</span>' : '';
-  var edit = S.canEdit ? '<button class="btn sm" data-edit="'+e.id+'">编辑</button>' : '';
+  if (e.kind==='tutorial'){
+    var n=usedBy(e);
+    return '<div class="card it tut"><div class="hd">'+kp+'<div class="q">📄 '+hl(e.title)+'</div>'+where+'</div>'
+      + (e.content?'<div class="desc">'+hl(e.content)+'</div>':'')
+      + '<div class="url" title="'+esc(e.url)+'">🔗 '+esc(shortUrl(e.url))+'</div>'
+      + '<div class="ft"><span class="spacer"></span><button class="btn sm primary" data-copy="'+e.id+'">复制</button>'+editBtn(e)+'</div></div>';
+  }
+  var body='<div class="body">'+(q?highlight(e.content,q):linkify(e.content))+'</div>';
+  var att=attOf(e), atth = att.length ? '<div class="att"><span class="lb">附带教程</span>'+att.map(function(t){ return '<a href="'+esc(t.url)+'" target="_blank" rel="noopener" title="'+esc(t.url)+'">📄 '+esc(t.title)+'</a>'; }).join('')+'</div>' : '';
+  var copyLabel = e.kind==='faq' ? '复制答案' : '复制';
+  var copyTip = att.length ? '<span class="used">复制时会带上 '+att.length+' 个教程链接</span>' : '';
   if (e.kind==='faq'){
     return '<div class="card it faq"><div class="hd">'+kp+'<div class="q"><span class="qm">问</span>'+hl(e.title)+'</div>'+where+'</div>'
-      + '<div class="body">'+(q?highlight(e.content,q):linkify(e.content))+'</div>'
-      + '<div class="ft"><span class="meta">'+esc(meta)+'</span><span class="spacer"></span><button class="btn sm primary" data-copy="'+e.id+'">复制答案</button>'+edit+'</div></div>';
+      + body + atth
+      + '<div class="ft">'+copyTip+'<span class="meta">'+esc(meta)+'</span><span class="spacer"></span><button class="btn sm primary" data-copy="'+e.id+'">'+copyLabel+'</button>'+editBtn(e)+'</div></div>';
   }
-  if (e.kind==='tutorial'){
-    return '<div class="card it tut"><div class="hd">'+kp+'<div class="q">📄 '+hl(e.title)+'</div>'+where+'</div>'
-      + '<div class="url" title="'+esc(e.url)+'">'+esc(e.url)+'</div>'
-      + '<div class="ft"><span class="spacer"></span><a class="btn sm" href="'+esc(e.url)+'" target="_blank" rel="noopener">打开</a><button class="btn sm primary" data-copy="'+e.id+'">复制</button>'+edit+'</div></div>';
-  }
-  return '<div class="card it phr"><div class="hd">'+kp+'<div class="q" style="font-size:14px;color:var(--muted)">'+hl(e.title)+'</div>'+where+'</div>'
-    + '<div class="body">'+(q?highlight(e.content,q):linkify(e.content))+'</div>'
-    + '<div class="ft"><span class="meta">'+esc(meta)+'</span><span class="spacer"></span><button class="btn sm primary" data-copy="'+e.id+'">复制</button>'+edit+'</div></div>';
+  return '<div class="card it phr"><div class="hd">'+kp+'<div class="q" style="font-size:14px">💬 '+hl(e.title)+'</div>'+where+'</div>'
+    + body + atth
+    + '<div class="ft">'+copyTip+'<span class="meta">'+esc(meta)+'</span><span class="spacer"></span><button class="btn sm primary" data-copy="'+e.id+'">'+copyLabel+'</button>'+editBtn(e)+'</div></div>';
 }
 function fmt(ms){ var d=new Date(ms); return (d.getMonth()+1)+'/'+d.getDate()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
 function platView(){
   var p=S.pid==null?null:PMAP[S.pid];
   var name=pname(S.pid);
-  var h='<section class="card ph"><div class="tt"><h2>'+esc(name)+'</h2>'+(p&&p.status==='off_sale'?'<span class="pill" style="background:var(--red-soft);color:var(--red)">禁售</span>':'')+(S.pid==null?'<span class="sub">所有平台都适用的内容，比如下单多久、能不能退款</span>':'')+'</div>'
+  var h='<section class="card ph"><div class="tt"><h2>'+esc(name)+'</h2>'+(p&&p.status==='off_sale'?'<span class="pill" style="background:var(--red-soft);color:var(--red)">禁售</span>':'')+(S.pid==null?'<span class="sub">所有平台都适用的内容，比如下单多久、能不能退款</span>':'')+(MANAGE&&S.canEdit?'<span class="spacer"></span><button class="btn primary" data-add="1">＋ 新增'+KLABEL[S.kind]+'</button>':'')+'</div>'
     + '<div class="tabs" role="tablist">'+KINDS.map(function(k){ return '<button class="tab'+(S.kind===k[0]?' on':'')+'" role="tab" aria-selected="'+(S.kind===k[0])+'" data-kind="'+k[0]+'">'+k[1]+' <b>'+entriesOf(S.pid,k[0]).length+'</b></button>'; }).join('')+'</div></section>';
   var list=entriesOf(S.pid, S.kind);
-  if (S.kind==='tutorial' && list.length>1) h+='<section class="card" style="padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-left:4px solid var(--gold)"><b>🎁 '+esc(name)+' 教程合集</b><span class="sub">一次把这 '+list.length+' 篇都发给客户</span><span class="spacer"></span><button class="btn gold" data-copyall="1">复制全部 '+list.length+' 篇</button></section>';
   if (!list.length){
-    h+='<section class="card empty">'+esc(name)+' 还没有'+KLABEL[S.kind]+(S.canEdit?'<button class="btn primary" data-add="1">＋ 新增'+KLABEL[S.kind]+'</button>':'')+'</section>';
+    h+='<section class="card empty">'+esc(name)+' 还没有'+KLABEL[S.kind]+'</section>';
   } else if (S.kind==='tutorial'){
     h+='<div class="tgrid">'+list.map(function(e){ return itemHtml(e); }).join('')+'</div>';
   } else {
@@ -282,7 +329,7 @@ function searchView(){
 var ED=null;
 function openEdit(id){
   var e=id?S.entries.filter(function(x){ return x.id===id; })[0]:null;
-  ED = e ? Object.assign({}, e) : {id:null, platform_id:S.pid, kind:S.kind, title:(S.q.trim()&&!id?S.q.trim():''), content:'', url:''};
+  ED = e ? Object.assign({}, e, {tutorials:(e.tutorials||[]).slice()}) : {id:null, platform_id:S.pid, kind:S.kind, title:(S.q.trim()&&!id?S.q.trim():''), content:'', url:'', tutorials:[]};
   $('mTitle').textContent = e?'编辑':'新增';
   var popts='<option value="">通用（所有平台）</option>'+S.platforms.map(function(p){ return '<option value="'+p.id+'"'+(ED.platform_id===p.id?' selected':'')+'>'+esc(p.name)+(p.status==='off_sale'?'（禁售）':'')+'</option>'; }).join('');
   $('mBody').innerHTML='<div class="frow"><div class="fld"><label for="ep">平台</label><select id="ep">'+popts+'</select></div>'
@@ -290,6 +337,7 @@ function openEdit(id){
     + '<div class="fld"><label for="et" id="elt"></label><input id="et" value="'+esc(ED.title)+'"></div>'
     + '<div class="fld" id="fu"><label for="eu">教程链接</label><input id="eu" value="'+esc(ED.url)+'" placeholder="https://"></div>'
     + '<div class="fld" id="fc"><label for="ec" id="elc"></label><textarea id="ec">'+esc(ED.content)+'</textarea></div>'
+    + '<div class="fld" id="ft"><label>附带教程（复制时自动加在后面，同一篇教程只需要在「教程」里维护一份）</label><div class="tpick" id="etp"></div></div>'
     + '<div class="err" id="eerr"></div>';
   $('mFoot').innerHTML=(e&&S.canDelete?'<button class="btn danger" id="eDel">删除</button>':'')+'<span class="spacer"></span><button class="btn" data-close>取消</button><button class="btn primary" id="eSave">保存</button>';
   kindFields();
@@ -301,12 +349,22 @@ function kindFields(){
   $('elt').textContent = k==='faq'?'客户的问题':k==='tutorial'?'教程名称':'标题（给同事看，可不填）';
   $('et').placeholder = k==='faq'?'比如：币多久过期？':k==='tutorial'?'比如：fanbox取消次月自动扣款教程':'比如：账号交付注意';
   $('elc').textContent = k==='faq'?'答案（复制给客户的内容）':'快捷语内容（复制给客户的内容）';
+  if (k==='tutorial'){ $('elc').textContent='说明（给同事看：什么时候发这篇，可不填）'; }
   $('fu').classList.toggle('hidden', k!=='tutorial');
-  $('fc').classList.toggle('hidden', k==='tutorial');
+  $('ft').classList.toggle('hidden', k==='tutorial');
+  $('ec').style.height = k==='tutorial' ? '70px' : '';
+  renderPick();
+}
+function renderPick(){
+  if (!ED) return;
+  var pid=$('ep').value ? +$('ep').value : null;
+  var list=S.entries.filter(function(t){ return t.kind==='tutorial' && (t.platform_id===pid || t.platform_id==null || ED.tutorials.indexOf(t.id)>=0); });
+  list.sort(function(a,b){ return (ED.tutorials.indexOf(b.id)>=0)-(ED.tutorials.indexOf(a.id)>=0); });
+  $('etp').innerHTML = list.length ? list.map(function(t){ return '<label><input type="checkbox" data-tp="'+t.id+'"'+(ED.tutorials.indexOf(t.id)>=0?' checked':'')+'> 📄 '+esc(t.title)+(t.platform_id!==pid?' <span class="sub">（'+esc(pname(t.platform_id))+'）</span>':'')+'</label>'; }).join('') : '<span class="sub">这个平台还没有教程，先到「教程」里加</span>';
 }
 function closeModal(){ $('mask').classList.add('hidden'); $('modal').classList.add('hidden'); ED=null; }
 function saveEdit(){
-  var body={platform_id: $('ep').value ? +$('ep').value : null, kind:$('ek').value, title:$('et').value.trim(), content: $('ek').value==='tutorial' ? '' : $('ec').value, url: $('ek').value==='tutorial' ? $('eu').value.trim() : ''};
+  var body={platform_id: $('ep').value ? +$('ep').value : null, kind:$('ek').value, title:$('et').value.trim(), content: $('ec').value, url: $('ek').value==='tutorial' ? $('eu').value.trim() : '', tutorials: $('ek').value==='tutorial' ? [] : ED.tutorials.slice()};
   var btn=$('eSave'); btn.disabled=true; $('eerr').textContent='';
   var req = ED.id ? send('PATCH','/knowledge/'+ED.id+'/',body) : send('POST','/knowledge/',body);
   req.then(function(saved){
@@ -329,6 +387,7 @@ document.addEventListener('click', function(ev){
   else if (d.kind){ S.kind=d.kind; writeHash(); render(); }
   else if (d.copy){ var e=S.entries.filter(function(x){ return x.id===+d.copy; })[0]; if (e) copy(textOf(e)); }
   else if (d.copyall){ var list=entriesOf(S.pid,'tutorial'); copy(pname(S.pid)+' 相关教程：\n'+list.map(function(e,i){ return (i+1)+'. '+textOf(e); }).join('\n'), '已复制 '+list.length+' 篇教程'); }
+  else if (d.more){ OPEN[+d.more]=!OPEN[+d.more]; render(); }
   else if (d.edit) openEdit(+d.edit);
   else if (d.add || t.id==='addBtn') openEdit(null);
   else if (d.close!==undefined) closeModal();
@@ -337,7 +396,12 @@ document.addEventListener('click', function(ev){
   else if (t.id==='qx'){ S.q=''; $('q').value=''; render(); $('q').focus(); }
 });
 $('mask').addEventListener('click', closeModal);
-document.addEventListener('change', function(ev){ if (ev.target.id==='ek') kindFields(); });
+document.addEventListener('change', function(ev){
+  var t=ev.target;
+  if (t.id==='ek') kindFields();
+  else if (t.id==='ep') renderPick();
+  else if (t.dataset && t.dataset.tp && ED){ var id=+t.dataset.tp, i=ED.tutorials.indexOf(id); if (t.checked && i<0) ED.tutorials.push(id); if (!t.checked && i>=0) ED.tutorials.splice(i,1); }
+});
 document.addEventListener('input', function(ev){
   var t=ev.target;
   if (t.id==='q'){ S.q=t.value; render(); }
@@ -352,6 +416,7 @@ document.addEventListener('keydown', function(ev){
 // ================= 启动 =================
 call('/knowledge/').then(function(d){
   S.platforms=d.platforms||[]; S.entries=d.entries||[]; S.canEdit=!!d.can_edit; S.canDelete=!!d.can_delete;
+  S.platforms.sort(function(x,y){ return byLetter(x.name, y.name); });
   S.platforms.forEach(function(p){ PMAP[p.id]=p; });
   if (!readHash()){
     var last=lsGet('xh_kb_last');

@@ -222,6 +222,7 @@ function applyLoginSession(auth: ReturnType<typeof useXinhuoAuthStore>, username
         }
         if (r.meta?.requiresCeo && !auth.isCeo) return false
         if (r.meta?.requiresSuperuser && !auth.isSuperuser) return false
+        if (r.meta?.requiresManager && !(auth.isSuperuser || auth.isBoss || auth.isCeo)) return false
         return true
       })
 
