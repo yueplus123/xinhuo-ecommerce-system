@@ -145,10 +145,11 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         }
       },
       {
+        // 「教程合计(对客户)」已删除，内容都在「教程+话术」里
         path: 'nanny-tutorials',
-        component: () => import('@/views/Xinhuo/NannyTutorialsPage.vue'),
-        name: 'NannyTutorials',
-        meta: { title: '教程合计(对客户)', icon: 'Reading', navGroup: 2 }
+        redirect: '/knowledge',
+        name: 'NannyTutorialsRedirect',
+        meta: { hidden: true }
       },
       {
         path: 'duty-checkin',
@@ -209,37 +210,11 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         }
       },
       {
-        path: 'common-cards',
-        component: () => import('@/views/Xinhuo/CommonCardsShell.vue'),
-        name: 'CommonCards',
-        redirect: '/common-cards/cards',
-        meta: { title: '常用卡', icon: 'Wallet', guestAllowed: true, navGroup: 4 },
-        children: [
-          {
-            path: 'cards',
-            component: () => import('@/views/Xinhuo/CommonCardsPage.vue'),
-            name: 'CommonCardNumbers',
-            meta: {
-              title: '常用卡',
-              hidden: true,
-              canTo: true,
-              guestAllowed: true,
-              activeMenu: '/common-cards'
-            }
-          },
-          {
-            path: 'accounts',
-            component: () => import('@/views/Xinhuo/CommonAccountsPage.vue'),
-            name: 'CommonAccounts',
-            meta: {
-              title: '常用号',
-              hidden: true,
-              canTo: true,
-              guestAllowed: true,
-              activeMenu: '/common-cards'
-            }
-          }
-        ]
+        // 「常用卡 / 常用号」已删除
+        path: 'common-cards/:rest(.*)*',
+        redirect: '/data-screen',
+        name: 'CommonCardsRedirect',
+        meta: { hidden: true }
       },
       {
         path: 'payment-tutorials',
@@ -329,7 +304,7 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
       },
       {
         path: 'customer/nanny-tutorials',
-        redirect: '/nanny-tutorials',
+        redirect: '/knowledge',
         name: 'CustomerNannyRedirect',
         meta: { hidden: true }
       },

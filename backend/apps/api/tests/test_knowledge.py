@@ -8,7 +8,7 @@ from django.core.management import call_command
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from backend.apps.catalog.models import SKU, Business, KnowledgeEntry, Platform, QuickPhrase, TutorialPool
+from backend.apps.catalog.models import SKU, Business, KnowledgeEntry, PhrasePool, Platform, QuickPhrase, TutorialPool
 from backend.apps.catalog.roles import GUEST_GROUP_NAME, ensure_boss_group
 
 
@@ -144,3 +144,35 @@ class SeedKnowledgeNamingTests(TestCase):
         self.assertEqual(tu.get(title="独享卡支付教程").url, "https://x.feishu.cn/docx/AAA")  # 用档位引用的那个链接
         ph = KnowledgeEntry.objects.get(kind="phrase", content__startswith="1️⃣")
         self.assertEqual(ph.tutorials, [tu.get(title="独享卡支付教程").id])
+
+
+class SeedPhrasePoolTests(TestCase):
+    def test_phrase_pool_goes_to_general(self):
+        PhrasePool.objects.create(name="欢迎语", content="您好，在的～")
+        PhrasePool.objects.create(name="欢迎语2", content="您好，在的～")  # 内容相同只放一条
+        call_command("seed_knowledge_base", "--apply", stdout=StringIO())
+        ph = KnowledgeEntry.objects.filter(kind="phrase", platform=None)
+        self.assertEqual(list(ph.values_list("title", "content")), [("欢迎语", "您好，在的～")])
+        call_command("seed_knowledge_base", "--apply", stdout=StringIO())
+        self.assertEqual(KnowledgeEntry.objects.filter(kind="phrase").count(), 1)
+
+
+class SkuSaveKeepsOldPhrasesTests(TestCase):
+    """管理后台 SKU 编辑页不再提交话术 / 教程：保存时原来的数据不能被清空。"""
+
+    def test_save_without_phrase_fields_keeps_them(self):
+        U = get_user_model()
+        admin = U.objects.create_user("su", password="x", is_staff=True, is_superuser=True)
+        p = Platform.objects.create(name="apple")
+        b = Business.objects.create(platform=p, name="苹果id")
+        s = SKU.objects.create(business=b, name="美区", tutorial_text="登录教程")
+        QuickPhrase.objects.create(sku=s, content="旧话术")
+        c = APIClient()
+        c.force_authenticate(admin)
+        r = c.put(f"/api/manage/sku-editor/{s.id}/",
+                  {"name": "美区2", "status": "on_sale", "price_items": "[]", "channel_tag_ids": "[]"}, format="multipart")
+        self.assertEqual(r.status_code, 200, getattr(r, "data", r))
+        s.refresh_from_db()
+        self.assertEqual(s.name, "美区2")
+        self.assertEqual(s.tutorial_text, "登录教程")
+        self.assertEqual(list(s.quick_phrases.values_list("content", flat=True)), ["旧话术"])

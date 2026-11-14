@@ -1,12 +1,9 @@
 import api from '@/api/client'
 
 export type PoolKey =
-  | 'phrase-pool'
-  | 'tutorial-pool'
   | 'platform-tag-pool'
   | 'channel-tag-pool'
   | 'usd-proxy-price-pool'
-  | 'quick-phrases'
 
 export interface PoolRow {
   id: number
@@ -48,13 +45,6 @@ export async function quickAddPoolTag(key: PoolKey, name: string) {
   const { data } = await api.post<{ id: number; name: string; message: string }>(
     `${base(key)}quick-add/`,
     { name }
-  )
-  return data
-}
-
-export async function listQuickPhraseSkuOptions() {
-  const { data } = await api.get<Array<{ id: number; label: string }>>(
-    '/manage/pools/quick-phrases/sku-options/'
   )
   return data
 }

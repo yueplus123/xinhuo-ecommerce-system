@@ -5,6 +5,7 @@
   - 快捷语：话术里「要说的话」单独成一条，夹带的教程链接拆出来，改成「附带教程」
     （复制时会自动加在后面）；分点（1️⃣ 2️⃣…）各占一行；内容相同的只放一条，标题写上用到它的业务。
   - 教程池里没有被任何档位、话术用到的教程：放到「通用」里，之后可以在管理页改平台。
+  - 话术池（PhrasePool）：每条变成「通用」里的一条快捷语，标题用话术池里的名称。
   - 问答：不导入（原来没有这类数据），在「教程+话术管理」里新增。
   - 已经导入过的（同平台、同类型、同链接 / 同内容）会跳过，所以重复执行也不会重复添加。
 
@@ -21,7 +22,7 @@ from collections import OrderedDict
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from backend.apps.catalog.models import SKU, KnowledgeEntry, Platform, TutorialPool
+from backend.apps.catalog.models import SKU, KnowledgeEntry, PhrasePool, Platform, TutorialPool
 
 TUTORIAL_SEP = " / "  # 与 manage_sku._TUTORIAL_SEP 一致
 # 话术里「🔗链接」或飞书 / 金山文档链接当作教程；其他链接（比如设置页）留在话术里
@@ -196,6 +197,23 @@ def plan():
         if (None, _norm_url(url)) in have_tut:
             continue
         tut_rows.append((None, n, url))
+
+    # 话术池 → 「通用」快捷语（夹带的教程链接同样拆成附带教程）
+    seen_general = set()
+    for ph in PhrasePool.objects.order_by("sort_order", "id"):
+        notes, links = _split_phrase(ph.content, pool_by_url, pool_names)
+        if not notes:
+            continue
+        k = _norm_text(notes)
+        if (None, k) in have_phr or k in seen_general:
+            continue
+        seen_general.add(k)
+        for name, url in links:
+            if (None, _norm_url(url)) not in have_tut and not any(
+                    r[0] is None and _norm_url(r[2]) == _norm_url(url) for r in tut_rows):
+                tut_rows.append((None, pool_by_url.get(_norm_url(url)) or name, url))
+        title = (ph.name or "").strip() or _title_of(notes)
+        phr_rows.append((None, title, notes, [(pool_by_url.get(_norm_url(u)) or n, u) for n, u in links]))
     return tut_rows, phr_rows, missing
 
 
@@ -212,7 +230,7 @@ class Command(BaseCommand):
             by.setdefault(p.name if p else "通用", []).append(f"[教程] {name}")
         for p, title, _c, links in phr_rows:
             extra = f"（附带 {len(links)} 个教程）" if links else ""
-            by.setdefault(p.name, []).append(f"[快捷语] {title}{extra}")
+            by.setdefault(p.name if p else "通用", []).append(f"[快捷语] {title}{extra}")
         for name, items in by.items():
             self.stdout.write(self.style.MIGRATE_HEADING(f"{name}（{len(items)} 条）"))
             for it in items:
@@ -222,7 +240,7 @@ class Command(BaseCommand):
             for m in OrderedDict.fromkeys(missing):
                 self.stdout.write("  " + m)
         self.stdout.write(f"\n合计：教程 {len(tut_rows)} 条，快捷语 {len(phr_rows)} 条。"
-                          "原来商品上的话术、教程和教程池都不会改动。")
+                          "原来商品上的话术、教程、教程池和话术池都不会改动。")
         if not opts["apply"]:
             self.stdout.write(self.style.WARNING("这是试运行，什么都没写。确认无误后加 --apply 正式导入。"))
             return
@@ -235,7 +253,8 @@ class Command(BaseCommand):
                                                   url=url, sort_order=i)
                 ids[(e.platform_id, _norm_url(url))] = e.id
             for i, (p, title, notes, links) in enumerate(phr_rows):
-                att = [ids[(p.id, _norm_url(u))] for _n, u in links if (p.id, _norm_url(u)) in ids]
+                pid = p.id if p else None
+                att = [ids[(pid, _norm_url(u))] for _n, u in links if (pid, _norm_url(u)) in ids]
                 KnowledgeEntry.objects.create(platform=p, kind=KnowledgeEntry.KIND_PHRASE, title=title[:300],
                                               content=notes, tutorials=list(dict.fromkeys(att)), sort_order=i)
         self.stdout.write(self.style.SUCCESS(f"✓ 已导入：教程 {len(tut_rows)} 条，快捷语 {len(phr_rows)} 条。"))

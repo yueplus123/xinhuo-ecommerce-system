@@ -263,7 +263,7 @@ textarea.copybuf{position:fixed;left:-9999px;top:0}
   <div class="in sform">
     <label class="fl" for="q">关键词</label>
     <div class="sbox">
-      <input id="q" class="finput" placeholder="平台、方式、档位、别名、话术、教程、收款渠道…" autocomplete="off">
+      <input id="q" class="finput" placeholder="平台、方式、档位、别名、收款渠道…" autocomplete="off">
       <div class="drop hidden" id="drop"></div>
     </div>
     <label class="fl" for="fstatus">状态</label>
@@ -298,7 +298,7 @@ textarea.copybuf{position:fixed;left:-9999px;top:0}
 <aside class="drawer hidden" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dTitle">
   <div class="dhead" id="dhead"><span class="grab" aria-hidden="true"></span><div class="crumb" id="dcrumb"></div><button class="xbtn" id="xbtn" aria-label="关闭">×</button></div>
   <div class="dbody" id="dbody"></div>
-  <div class="dfoot"><button class="act y" data-copy="phrase" id="fPhrase">复制话术</button><button class="act o" data-copy="quote">复制报价</button></div>
+  <div class="dfoot"><button class="act y" data-kb="1" id="fPhrase">看教程+话术</button><button class="act o" data-copy="quote">复制报价</button></div>
 </aside>
 
 <div class="toast hidden" id="toast"></div>
@@ -449,7 +449,7 @@ function renderPlat(){
     + (alias.length?'<div class="ptags">'+alias.map(function(t){ return '<span>'+esc(t)+'</span>'; }).join('')+'</div>':'')
     + (p.url?'<div class="urlrow"><span class="k">官网</span><span class="u" title="'+esc(p.url)+'">'+esc(p.url)+'</span><button class="mini" data-copyurl="1">复制</button></div>':'')
     + (warn?'<div class="pnote">'+(p.status==='off_sale'?'平台禁售。':'')+(p.note?'备注：'+esc(p.note):'')+'</div>':'')
-    + '<div class="stats"><span><b>'+p.businesses.length+'</b>个业务</span><span><b>'+sk.length+'</b>个档位</span><span>价格 <b>'+esc(rangeText((function(){var a=[];p.businesses.forEach(function(b){a=a.concat(bizPrices(b));});return a;})())||'—')+'</b></span><span class="hot"><b>'+x.ph+'/'+x.n+'</b>有话术</span><span class="hot"><b>'+x.tu+'/'+x.n+'</b>有教程</span></div>'
+    + '<div class="stats"><span><b>'+p.businesses.length+'</b>个业务</span><span><b>'+sk.length+'</b>个档位</span><span>价格 <b>'+esc(rangeText((function(){var a=[];p.businesses.forEach(function(b){a=a.concat(bizPrices(b));});return a;})())||'—')+'</b></span></div>'
     + '<div class="acts"><button class="btn" data-copy="ways">复制方式给客户</button><button class="btn" data-copy="allprices">复制价格表</button></div>'
     + '</div>';
   var shown = p.businesses.filter(function(b){ return bizOk(p,b); }).length;
@@ -461,8 +461,6 @@ function renderPlat(){
     var chans = []; b.skus.forEach(function(s){ s.channels.forEach(function(c){ if (chans.indexOf(c)<0) chans.push(c); }); });
     var tags = [];
     if (off) tags.push('<span class="o">禁售</span>');
-    tags.push(xs.ph?'<span>话术 '+xs.ph+'/'+xs.n+'</span>':'<span class="w">缺话术</span>');
-    tags.push(xs.tu?'<span>教程 '+xs.tu+'/'+xs.n+'</span>':'<span class="w">缺教程</span>');
     chans.slice(0,3).forEach(function(c){ tags.push('<span class="ch">'+esc(c)+'</span>'); });
     return '<button class="bcard'+(off?' off':'')+(i===st.b?' on':'')+'" data-b="'+i+'">'
       + '<span class="im">'+(off?'<span class="flag">禁售</span>':'')+'<b>'+esc(b.name)+'</b></span>'
@@ -501,8 +499,6 @@ function renderDrawer(){
 
   var bd=[];
   if (s.status!=='on_sale') bd.push('<span class="o">'+STATUS[s.status]+'</span>');
-  bd.push(s.phrases.length?'<span>有话术</span>':'<span class="w">缺话术</span>');
-  bd.push(s.tutorials.length?'<span>'+s.tutorials.length+' 个教程</span>':'<span class="w">缺教程</span>');
   if (s.precaution) bd.push('<span>有注意事项</span>');
   if (shots) bd.push('<span>'+shots+' 张截图</span>');
 
@@ -519,7 +515,7 @@ function renderDrawer(){
     + '<div class="r"><span class="k t">收款渠道</span>'+(s.channels.length?'<div class="chan">'+s.channels.map(function(c){ return '<span>'+esc(c)+'</span>'; }).join('')+'</div>':'<span class="faint">未设置</span>')+'</div>'
     + (tt?'<div class="r"><span class="k t">价格表</span><div>'+tt+'</div></div>':'')
     + '</div>'
-    + '<div class="acts2"><button class="act y" data-copy="phrase"'+(hasPh?'':' disabled')+'>'+(hasPh?'复制话术':'暂无话术')+'</button><button class="act o" data-copy="quote">复制报价</button></div>'
+    + '<div class="acts2"><button class="act y" data-kb="1">看教程+话术</button><button class="act o" data-copy="quote">复制报价</button></div>'
     + '</div></section>';
 
   if (s.price_notice) h += '<section class="card blk"><div class="bh"><h4>价格说明</h4></div><div class="txt">'+esc(s.price_notice)+'</div></section>';
@@ -529,10 +525,10 @@ function renderDrawer(){
   if (s.precaution) h += '<section class="card blk"><div class="bh"><h4>注意事项</h4></div><div class="txt">'+esc(s.precaution.replace(/\t/g,'\n'))+'</div></section>';
   var miss=[];
   if (!s.price_notice && !skuPrices(s).length && !isUsd(s)) miss.push('价格');
-  if (!hasPh) miss.push('话术'); if (!s.precaution) miss.push('注意事项'); if (!s.tutorials.length) miss.push('教程'); if (!shots) miss.push('会员截图'); if (!s.channels.length) miss.push('收款渠道');
+  if (!s.precaution) miss.push('注意事项'); if (!shots) miss.push('会员截图'); if (!s.channels.length) miss.push('收款渠道');
   if (miss.length) h += '<section class="card blk"><div class="bh"><h4>还缺什么</h4></div><div class="missing">这个档位还没填：<b>'+miss.join('、')+'</b></div></section>';
   $('dbody').innerHTML = h;
-  $('fPhrase').disabled = !hasPh; $('fPhrase').textContent = hasPh?'复制话术':'暂无话术';
+
 }
 
 // ---------- 地址栏：#/p/平台ID[/b/业务ID[/s/档位ID]] ----------
@@ -597,6 +593,12 @@ function exportBiz(){
 $('fstatus').addEventListener('change', applyFilter);
 
 // ---------- 复制 ----------
+// 跳到「教程+话术」的这个平台（话术、教程已经从这里移过去了）
+function goKnowledge(p){
+  var path='/knowledge?p='+encodeURIComponent(p.id)+'&k=phrase';
+  try{ if (window.parent!==window){ window.parent.postMessage({type:'xh-navigate', path:path}, location.origin); return; } }catch(e){}
+  location.href=path;
+}
 function toast(t){ var el=$('toast'); el.textContent=t; el.classList.remove('hidden'); clearTimeout(toast._t); toast._t=setTimeout(function(){ el.classList.add('hidden'); },1400); }
 function copy(txt){ var done=function(){ toast('已复制，可以直接粘贴'); }; function fb(){ var b=$('buf'); b.value=txt; b.select(); try{document.execCommand('copy');}catch(e){} done(); } if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done,fb); else fb(); }
 function quoteText(b,s){
@@ -610,7 +612,6 @@ function quoteText(b,s){
 function copyWhat(k){
   var p=P();
   if (k==='quote') return p.name+' '+quoteText(B(),S());
-  if (k==='phrase') return S().phrases.join('\n\n');
   if (k==='ways'){ var ws=p.businesses.filter(function(b){ return !bizOff(b); });
     return p.name+' 目前有这几种方式：\n'+ws.map(function(b,i){ var r=rangeText(bizPrices(b)), o=onSale(b); return (i+1)+'. '+b.name+'（'+o.map(function(k){return k.name;}).join(' / ')+'）'+((r||(o[0]&&o[0].price_notice))?'：'+(r||o[0].price_notice):''); }).join('\n')+'\n\n你看想要哪一种，我给你详细说～'; }
   if (k==='allprices') return p.name+' 价格表\n'+p.businesses.map(function(b){ return onSale(b).map(function(s){ return quoteText(b,s); }).join('\n'); }).filter(Boolean).join('\n\n');
@@ -632,6 +633,7 @@ document.addEventListener('click', function(e){
   else if (t.dataset.cp!==undefined) copy(S().phrases[+t.dataset.cp]);
   else if (t.dataset.copyurl) copy(P().url);
   else if (t.dataset.copy) copy(copyWhat(t.dataset.copy));
+  else if (t.dataset.kb) goKnowledge(P());
   else if (t.id==='qbtn') applyFilter();
   else if (t.id==='rbtn') resetFilter();
   else if (t.id==='expbtn') exportBiz();

@@ -16,7 +16,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     name: '商品与大厅',
     items: [
-      { title: '平台管理', desc: '平台、业务、SKU（价格 / 话术 / 截图 / 教程）', path: '/platforms', icon: 'Goods', children: ['/skus'] },
+      { title: '平台管理', desc: '平台、业务、SKU（价格 / 渠道 / 截图）', path: '/platforms', icon: 'Goods', children: ['/skus'] },
       { title: '大厅板块管理', desc: '大厅公告、置顶、配图', path: '/hall-blocks', icon: 'Grid' }
     ]
   },
@@ -33,10 +33,9 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         title: '教程+话术',
-        desc: '按平台管理 问答 / 教程 / 快捷语（职员端「教程+话术」的内容）；旧的教程池、话术池、SKU 快捷话术也在这里',
+        desc: '按平台管理 问答 / 教程 / 快捷语（职员端「教程+话术」的内容）',
         path: '/knowledge',
-        icon: 'Notebook',
-        children: ['/tutorial-pool', '/phrase-pool', '/quick-phrases']
+        icon: 'Notebook'
       },
       { title: '平台标签池', desc: '平台的标签选项', path: '/platform-tag-pool', icon: 'PriceTag' },
       { title: '渠道池', desc: 'SKU 的渠道标签选项', path: '/channel-tag-pool', icon: 'Share' },

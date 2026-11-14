@@ -51,15 +51,12 @@ const form = reactive({
   price_type: '',
   price_notice: '',
   precaution: '',
-  channel_tag_ids: [] as number[],
-  tutorial_ids: [] as number[]
+  channel_tag_ids: [] as number[]
 })
 const prices = ref<Array<{ label: string; rmb_amount: number | undefined; notice: string }>>([])
-const phrases = ref<string[]>([])
 const images = ref<SkuImageItem[]>([]) // 已有截图
 const removeImageIds = ref<number[]>([])
 const newFiles = ref<UploadFile[]>([])
-const phrasePick = ref<number | undefined>(undefined)
 
 function fill(d: SkuDetail) {
   options.value = d.options
@@ -75,9 +72,7 @@ function fill(d: SkuDetail) {
   form.price_notice = d.price_notice
   form.precaution = d.precaution
   form.channel_tag_ids = [...d.channel_tag_ids]
-  form.tutorial_ids = [...d.tutorial_ids]
   prices.value = d.price_items.map((p) => ({ label: p.label, rmb_amount: Number(p.rmb_amount), notice: p.notice }))
-  phrases.value = d.quick_phrases.map((q) => q.content)
   images.value = [...d.images]
   removeImageIds.value = []
   newFiles.value = []
@@ -114,15 +109,7 @@ const movePrice = (i: number, d: -1 | 1) => {
   ;[prices.value[i], prices.value[j]] = [prices.value[j], prices.value[i]]
 }
 
-// ---- 快捷话术 ----
-const addPhrase = () => phrases.value.push('')
-const removePhrase = (i: number) => phrases.value.splice(i, 1)
-function addFromPool() {
-  const p = options.value?.phrases.find((x) => x.id === phrasePick.value)
-  if (!p) return
-  phrases.value.push(p.content)
-  phrasePick.value = undefined
-}
+// 话术、教程已移到「教程+话术」（管理后台左侧「教程+话术」），这里不再编辑
 
 // ---- 截图 ----
 function beforeUpload(file: File) {
@@ -158,12 +145,10 @@ async function submit() {
   fd.append('price_notice', form.price_notice)
   fd.append('precaution', form.precaution)
   fd.append('channel_tag_ids', JSON.stringify(form.channel_tag_ids))
-  fd.append('tutorial_ids', JSON.stringify(form.tutorial_ids))
   fd.append(
     'price_items',
     JSON.stringify(prices.value.map((p) => ({ label: p.label, rmb_amount: String(p.rmb_amount), notice: p.notice })))
   )
-  fd.append('quick_phrases', JSON.stringify(phrases.value.map((content) => ({ content }))))
   fd.append('delete_image_ids', JSON.stringify(removeImageIds.value))
   for (const f of newFiles.value) if (f.raw) fd.append('images', f.raw)
 
@@ -231,34 +216,15 @@ async function submit() {
           </ElFormItem>
         </ElCard>
 
-        <ElCard shadow="never" header="渠道与教程" class="mb">
+        <ElCard shadow="never" header="渠道" class="mb">
           <ElFormItem label="渠道标签">
             <ElCheckboxGroup v-model="form.channel_tag_ids">
               <ElCheckbox v-for="t in options.channel_tags" :key="t.id" :value="t.id">{{ t.name }}</ElCheckbox>
             </ElCheckboxGroup>
             <span v-if="!options.channel_tags.length" class="muted">渠道池为空，请先到「渠道池」添加</span>
           </ElFormItem>
-          <ElFormItem label="对应教程">
-            <ElSelect v-model="form.tutorial_ids" multiple filterable placeholder="从教程池选择（按选择顺序展示）" style="width: 100%">
-              <ElOption v-for="t in options.tutorials" :key="t.id" :label="t.name" :value="t.id" />
-            </ElSelect>
-          </ElFormItem>
         </ElCard>
 
-        <ElCard shadow="never" header="快捷话术" class="mb">
-          <div class="rows">
-            <div v-for="(_, i) in phrases" :key="i" class="phrase-row">
-              <ElInput v-model="phrases[i]" type="textarea" :rows="2" />
-              <ElButton link type="danger" @click="removePhrase(i)">删除</ElButton>
-            </div>
-            <div class="phrase-add">
-              <ElButton size="small" @click="addPhrase">+ 添加话术</ElButton>
-              <ElSelect v-model="phrasePick" filterable clearable placeholder="从话术池导入一条" style="width: 280px" @change="addFromPool">
-                <ElOption v-for="p in options.phrases" :key="p.id" :label="p.name" :value="p.id" />
-              </ElSelect>
-            </div>
-          </div>
-        </ElCard>
 
         <ElCard shadow="never" header="会员截图" class="mb">
           <div v-if="images.length" class="imgs">

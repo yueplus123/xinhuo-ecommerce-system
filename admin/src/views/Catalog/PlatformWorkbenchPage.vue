@@ -189,7 +189,6 @@ async function copySku(s: SkuNode) {
               <tr>
                 <th>SKU</th>
                 <th style="width: 90px">状态</th>
-                <th style="width: 110px">快捷话术</th>
                 <th style="width: 220px">操作</th>
               </tr>
             </thead>
@@ -197,7 +196,6 @@ async function copySku(s: SkuNode) {
               <tr v-for="s in b.skus" :key="s.id">
                 <td>{{ s.name }}</td>
                 <td><ElTag :type="meta(s.status)?.tag" size="small">{{ s.status_label }}</ElTag></td>
-                <td>{{ s.quick_phrase_count }} 条</td>
                 <td>
                   <ElButton link type="primary" @click="router.push(`/skus/${s.id}`)">编辑</ElButton>
                   <ElButton link type="primary" @click="copySku(s)">复制</ElButton>

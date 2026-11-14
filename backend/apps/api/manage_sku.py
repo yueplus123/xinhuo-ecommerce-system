@@ -188,7 +188,10 @@ def _save(request, sku):
             raise serializers.ValidationError({"business": "业务不存在"})
 
     prices = _clean_price_items(_loads_list(data.get("price_items"), "price_items"))
-    phrases = _clean_phrases(_loads_list(data.get("quick_phrases"), "quick_phrases"))
+    # 话术、教程已移到「教程+话术」，管理后台的 SKU 编辑页不再提交这两项；没提交时保留原来的数据不动
+    has_phrases = "quick_phrases" in data
+    has_tutorials = "tutorial_ids" in data
+    phrases = _clean_phrases(_loads_list(data.get("quick_phrases"), "quick_phrases")) if has_phrases else []
     tag_ids = _int_list(data.get("channel_tag_ids"), "channel_tag_ids")
     tut_ids = _int_list(data.get("tutorial_ids"), "tutorial_ids")
     del_img_ids = _int_list(data.get("delete_image_ids"), "delete_image_ids")
@@ -216,15 +219,17 @@ def _save(request, sku):
     sku.price_type = price_type
     sku.price_notice = str(data.get("price_notice") or "")
     # 教程名称按选择顺序拼接，与旧编辑器的存储格式一致
-    sku.tutorial_text = _TUTORIAL_SEP.join(tutorials[i].name for i in tut_ids if i in tutorials)[:500]
+    if has_tutorials or not sku.pk:
+        sku.tutorial_text = _TUTORIAL_SEP.join(tutorials[i].name for i in tut_ids if i in tutorials)[:500]
     sku.price = prices[0]["rmb_amount"] if prices else None  # 旧字段：取第一档
     sku.save()
     sku.channel_tags.set(tags)
 
     sku.price_items.all().delete()
     SKUPriceItem.objects.bulk_create([SKUPriceItem(sku=sku, **p) for p in prices])
-    sku.quick_phrases.all().delete()
-    QuickPhrase.objects.bulk_create([QuickPhrase(sku=sku, **q) for q in phrases])
+    if has_phrases:
+        sku.quick_phrases.all().delete()
+        QuickPhrase.objects.bulk_create([QuickPhrase(sku=sku, **q) for q in phrases])
 
     if del_img_ids:
         SKUImage.objects.filter(sku=sku, pk__in=del_img_ids).delete()

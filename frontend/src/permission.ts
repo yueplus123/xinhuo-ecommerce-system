@@ -27,9 +27,7 @@ function isGuestPathAllowed(path: string) {
     p === '/products' ||
     p.startsWith('/products/') ||
     p === '/knowledge' ||
-    p === '/fanbox-stats' ||
-    p === '/common-cards' ||
-    p.startsWith('/common-cards/')
+    p === '/fanbox-stats'
   )
 }
 
