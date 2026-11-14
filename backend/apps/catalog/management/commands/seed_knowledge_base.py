@@ -5,7 +5,8 @@
   - 快捷语：话术里「要说的话」单独成一条，夹带的教程链接拆出来，改成「附带教程」
     （复制时会自动加在后面）；分点（1️⃣ 2️⃣…）各占一行；内容相同的只放一条，标题写上用到它的业务。
   - 教程池里没有被任何档位、话术用到的教程：放到「通用」里，之后可以在管理页改平台。
-  - 话术池（PhrasePool）：每条变成「通用」里的一条快捷语，标题用话术池里的名称。
+  - 话术池（PhrasePool）：按名称里的平台名放到对应平台（比如「telegram账号」→ telegram），认不出平台的放「通用」；
+    内容和已有快捷语相同的跳过；夹带的教程用这个平台已有的那一篇，没有才新建。
   - 问答：不导入（原来没有这类数据），在「教程+话术管理」里新增。
   - 已经导入过的（同平台、同类型、同链接 / 同内容）会跳过，所以重复执行也不会重复添加。
 
@@ -119,6 +120,27 @@ def _split_phrase(text: str, pool_by_url: dict, pool_names: list[str]):
     return _format_notes(notes), tuts
 
 
+# 话术池名称里的叫法 → 平台名
+_PLATFORM_ALIASES = {"谷歌": "google", "gmail": "google", "推特": "x 推特", "飞机": "telegram", "电报": "telegram",
+                     "引力币": "引力圈 引力币", "unifans": "引力圈 引力币", "gpt": "chatgpt", "苹果": "apple"}
+
+
+def _guess_platform(name: str, plats):
+    """按名称猜平台：名称里包含平台名（或常见叫法）就算；有多个时取最长的那个平台名。"""
+    low = (name or "").lower().replace(" ", "")
+    hit, best = None, 0
+    for p in plats:
+        pn = (p.name or "").lower().replace(" ", "")
+        keys = [pn] + [t for t in (p.name or "").lower().split() if len(t) >= 2]
+        for a, target in _PLATFORM_ALIASES.items():
+            if target.replace(" ", "") == pn:
+                keys.append(a)
+        for kk in keys:
+            if kk and kk in low and len(kk) > best:
+                hit, best = p, len(kk)
+    return hit
+
+
 def plan():
     """返回 (要新增的教程, 要新增的快捷语, 找不到链接的教程)。
 
@@ -198,22 +220,31 @@ def plan():
             continue
         tut_rows.append((None, n, url))
 
-    # 话术池 → 「通用」快捷语（夹带的教程链接同样拆成附带教程）
-    seen_general = set()
+    # 话术池 → 按名称认平台，认不出放「通用」（夹带的教程链接同样拆成附带教程）
+    plats = list(Platform.objects.all())
+    pending_tut = {(r[0].id if r[0] else None, _norm_url(r[2])) for r in tut_rows} | \
+                  {(r[0].id if r[0] else None, "name:" + _norm(r[1])) for r in tut_rows}
+    pending_phr = {(r[0].id if r[0] else None, _norm_text(r[2])) for r in phr_rows}
     for ph in PhrasePool.objects.order_by("sort_order", "id"):
         notes, links = _split_phrase(ph.content, pool_by_url, pool_names)
         if not notes:
             continue
+        plat = _guess_platform(ph.name or "", plats)
+        pid = plat.id if plat else None
         k = _norm_text(notes)
-        if (None, k) in have_phr or k in seen_general:
+        if (pid, k) in have_phr or (pid, k) in pending_phr:
             continue
-        seen_general.add(k)
+        pending_phr.add((pid, k))
+        att = []
         for name, url in links:
-            if (None, _norm_url(url)) not in have_tut and not any(
-                    r[0] is None and _norm_url(r[2]) == _norm_url(url) for r in tut_rows):
-                tut_rows.append((None, pool_by_url.get(_norm_url(url)) or name, url))
+            name = pool_by_url.get(_norm_url(url)) or name
+            att.append((name, url))
+            if {(pid, _norm_url(url)), (pid, "name:" + _norm(name))} & (have_tut | pending_tut):
+                continue
+            tut_rows.append((plat, name, url))
+            pending_tut |= {(pid, _norm_url(url)), (pid, "name:" + _norm(name))}
         title = (ph.name or "").strip() or _title_of(notes)
-        phr_rows.append((None, title, notes, [(pool_by_url.get(_norm_url(u)) or n, u) for n, u in links]))
+        phr_rows.append((plat, title, notes, att))
     return tut_rows, phr_rows, missing
 
 
@@ -248,13 +279,19 @@ class Command(BaseCommand):
             ids: dict[tuple, int] = {}
             for e in KnowledgeEntry.objects.filter(kind=KnowledgeEntry.KIND_TUTORIAL):
                 ids[(e.platform_id, _norm_url(e.url))] = e.id
+                ids.setdefault((e.platform_id, "name:" + _norm(e.title)), e.id)
             for i, (p, name, url) in enumerate(tut_rows):
                 e = KnowledgeEntry.objects.create(platform=p, kind=KnowledgeEntry.KIND_TUTORIAL, title=name[:300],
                                                   url=url, sort_order=i)
                 ids[(e.platform_id, _norm_url(url))] = e.id
+                ids.setdefault((e.platform_id, "name:" + _norm(name)), e.id)
             for i, (p, title, notes, links) in enumerate(phr_rows):
                 pid = p.id if p else None
-                att = [ids[(pid, _norm_url(u))] for _n, u in links if (pid, _norm_url(u)) in ids]
+                att = []
+                for n, u in links:
+                    i = ids.get((pid, _norm_url(u))) or ids.get((pid, "name:" + _norm(n)))
+                    if i and i not in att:
+                        att.append(i)
                 KnowledgeEntry.objects.create(platform=p, kind=KnowledgeEntry.KIND_PHRASE, title=title[:300],
-                                              content=notes, tutorials=list(dict.fromkeys(att)), sort_order=i)
+                                              content=notes, tutorials=att, sort_order=i)
         self.stdout.write(self.style.SUCCESS(f"✓ 已导入：教程 {len(tut_rows)} 条，快捷语 {len(phr_rows)} 条。"))

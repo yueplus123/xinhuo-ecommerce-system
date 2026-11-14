@@ -147,14 +147,31 @@ class SeedKnowledgeNamingTests(TestCase):
 
 
 class SeedPhrasePoolTests(TestCase):
-    def test_phrase_pool_goes_to_general(self):
+    def test_phrase_pool_goes_to_matching_platform(self):
+        tg = Platform.objects.create(name="telegram")
+        g = Platform.objects.create(name="google")
+        b = Business.objects.create(platform=tg, name="telegram账号")
+        sku = SKU.objects.create(business=b, name="成品号", tutorial_text="改中文教程")
+        TutorialPool.objects.create(name="改中文教程", detail_url="https://x.feishu.cn/docx/ZH")
+        QuickPhrase.objects.create(sku=sku, content="1️⃣尽快改密码 改中文教程 🔗https://x.feishu.cn/docx/ZH")
+        PhrasePool.objects.create(name="telegram账号", content="1️⃣尽快改密码 改中文教程 🔗https://x.feishu.cn/docx/ZH")  # 和已有的一样
+        PhrasePool.objects.create(name="telegram新号提醒", content="新号先养几天 改中文教程 🔗https://x.feishu.cn/docx/ZH")
+        PhrasePool.objects.create(name="谷歌邮箱换绑", content="请换绑成自己的邮箱")
         PhrasePool.objects.create(name="欢迎语", content="您好，在的～")
         PhrasePool.objects.create(name="欢迎语2", content="您好，在的～")  # 内容相同只放一条
         call_command("seed_knowledge_base", "--apply", stdout=StringIO())
-        ph = KnowledgeEntry.objects.filter(kind="phrase", platform=None)
-        self.assertEqual(list(ph.values_list("title", "content")), [("欢迎语", "您好，在的～")])
+        ph = KnowledgeEntry.objects.filter(kind="phrase")
+        self.assertEqual(ph.filter(platform=tg).count(), 2)  # SKU 话术 1 条 + 话术池新的 1 条（重复的跳过）
+        new = ph.get(title="telegram新号提醒")
+        self.assertEqual(new.platform, tg)
+        tut = KnowledgeEntry.objects.filter(kind="tutorial", title="改中文教程")
+        self.assertEqual(tut.count(), 1)  # 不会在「通用」里再建一篇
+        self.assertEqual(new.tutorials, [tut.get().id])
+        self.assertEqual(ph.get(title="谷歌邮箱换绑").platform, g)
+        self.assertEqual(list(ph.filter(platform=None).values_list("title", flat=True)), ["欢迎语"])
+        n = KnowledgeEntry.objects.count()
         call_command("seed_knowledge_base", "--apply", stdout=StringIO())
-        self.assertEqual(KnowledgeEntry.objects.filter(kind="phrase").count(), 1)
+        self.assertEqual(KnowledgeEntry.objects.count(), n)
 
 
 class SkuSaveKeepsOldPhrasesTests(TestCase):
