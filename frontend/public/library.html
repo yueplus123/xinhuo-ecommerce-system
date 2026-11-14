@@ -378,7 +378,7 @@ var st = {p:0, b:-1, s:0, img:0, kw:'', fs:''};
 function lc(x){ return String(x||'').toLowerCase(); }
 function skuText(p,b,s){
   return lc([p.name,p.note,p.url,p.tags.join(' '),b.name,s.name,s.note,s.price_notice,s.precaution,
-    s.channels.join(' '),s.phrases.join(' '),s.tutorials.map(function(x){ return x.name; }).join(' ')].join(' '));
+    s.channels.join(' ')].join(' '));
 }
 function skuOk(p,b,s){ return (!st.fs || s.status===st.fs) && (!st.kw || skuText(p,b,s).indexOf(st.kw)>=0); }
 function bizOk(p,b){ return !st.kw && !st.fs ? true : b.skus.some(function(s){ return skuOk(p,b,s); }); }
@@ -403,7 +403,7 @@ function bizPrices(b){ var a=[]; onSale(b).forEach(function(s){ a=a.concat(skuPr
 function allSkus(p){ var a=[]; p.businesses.forEach(function(b){ a=a.concat(b.skus); }); return a; }
 function isUsd(s){ return s.price_type==='usd_proxy'; }
 function noteExtra(s){ return s.note && s.note.trim()!==(s.price_notice||'').trim() ? s.note : ''; }
-function stat(l){ var n=l.length,ph=0,tu=0; l.forEach(function(s){ if(s.phrases.length) ph++; if(s.tutorials.length) tu++; }); return {n:n,ph:ph,tu:tu}; }
+function stat(l){ return {n:l.length}; }
 function P(){ return DATA[st.p]; } function B(){ return P().businesses[st.b]; } function S(){ return B().skus[st.s]; }
 var WARN = /风险|付不了|失败/;
 // 平台图标文字：英文取首字母大写，中文取前两个字
@@ -504,7 +504,6 @@ function renderDrawer(){
 
   var opts = b.skus.map(function(k,i){ return '<button class="opt'+(i===st.s?' on':'')+(k.status==='off_sale'?' off':'')+'" data-s="'+i+'">'+esc(k.name)+(k.status!=='on_sale'?'<small>'+STATUS[k.status]+'</small>':'')+'</button>'; }).join('');
   var tt = tierTable(s);
-  var hasPh = s.phrases.length>0;
 
   var h = '<section class="card prod"><div class="gal">'+main+'<div class="thumbs'+(shots?'':' solo')+'">'+th+'</div></div><div class="info">'
     + '<div class="price">'+price+'</div>'
@@ -630,7 +629,6 @@ document.addEventListener('click', function(e){
   else if (t.dataset.go){ var a=t.dataset.go.split(',').map(Number); $('q').value=''; $('drop').classList.add('hidden');
     if (a[0]==='p'||t.dataset.go[0]==='p') selectPlat(a[1]);
     else { st.p=a[1]; st.b=a[2]; st.s=t.dataset.go[0]==='s'?a[3]:0; st.img=0; try{ localStorage.setItem('xh_lib_platform', P().id); }catch(err){} renderPlatbar(); renderPlat(); sync(true); openDrawer(); } }
-  else if (t.dataset.cp!==undefined) copy(S().phrases[+t.dataset.cp]);
   else if (t.dataset.copyurl) copy(P().url);
   else if (t.dataset.copy) copy(copyWhat(t.dataset.copy));
   else if (t.dataset.kb) goKnowledge(P());

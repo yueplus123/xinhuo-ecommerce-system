@@ -8,12 +8,9 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from backend.apps.catalog.models import SKU, Business, Platform, TutorialPool, UsdProxyPriceTier
+from backend.apps.catalog.models import SKU, Business, Platform, UsdProxyPriceTier
 
 from .views import StaffOnlyPermission
-
-TUTORIAL_SEP = " / "  # 与 manage_sku._TUTORIAL_SEP 一致
-
 
 def _num(v):
     if v is None:
@@ -31,7 +28,6 @@ def _file_url(f):
 
 def build_catalog_library():
     price_type_labels = dict(SKU.PRICE_TYPE_CHOICES)
-    tutorials = {t.name: t.detail_url for t in TutorialPool.objects.all()}
     platforms = Platform.objects.prefetch_related(
         "platform_tags",
         Prefetch(
@@ -40,7 +36,7 @@ def build_catalog_library():
                 Prefetch(
                     "skus",
                     queryset=SKU.objects.order_by("id").prefetch_related(
-                        "price_items", "quick_phrases", "channel_tags", "member_images"
+                        "price_items", "channel_tags", "member_images"
                     ),
                 )
             ),
@@ -53,7 +49,6 @@ def build_catalog_library():
         for b in p.businesses.all():
             skus = []
             for s in b.skus.all():
-                names = [n.strip() for n in (s.tutorial_text or "").split(TUTORIAL_SEP) if n.strip()]
                 imgs = [_file_url(s.image)] + [_file_url(i.image) for i in s.member_images.all()]
                 imgs = list(dict.fromkeys(u for u in imgs if u))  # 主截图与会员截图常是同一个文件
                 skus.append({
@@ -71,8 +66,6 @@ def build_catalog_library():
                         {"label": i.label, "rmb_amount": _num(i.rmb_amount), "notice": i.notice}
                         for i in s.price_items.all()
                     ],
-                    "phrases": [x.content for x in s.quick_phrases.all()],
-                    "tutorials": [{"name": n, "url": tutorials.get(n, "")} for n in names],
                     "channels": [t.name for t in s.channel_tags.all()],
                     "image_urls": imgs,
                     "images": len(imgs),

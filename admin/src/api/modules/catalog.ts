@@ -19,7 +19,6 @@ export interface SkuNode {
   name: string
   status: SaleStatus
   status_label: string
-  quick_phrase_count: number
 }
 export interface BusinessNode {
   id: number
@@ -77,18 +76,12 @@ export interface SkuPriceItem {
   rmb_amount: string
   notice: string
 }
-export interface SkuPhrase {
-  id?: number
-  content: string
-}
 export interface SkuImageItem {
   id: number
   url: string
 }
 export interface SkuEditorOptions {
   channel_tags: Array<{ id: number; name: string }>
-  tutorials: Array<{ id: number; name: string }>
-  phrases: Array<{ id: number; name: string; content: string }>
   price_types: Array<{ value: string; label: string }>
   statuses: Array<{ value: SaleStatus; label: string }>
   usd_tiers: Array<{ id: number; usd_range: string; rate_percent: string }>
@@ -105,9 +98,7 @@ export interface SkuDetail {
   price_type: string
   price_notice: string
   channel_tag_ids: number[]
-  tutorial_ids: number[]
   price_items: SkuPriceItem[]
-  quick_phrases: SkuPhrase[]
   images: SkuImageItem[]
   options: SkuEditorOptions
 }

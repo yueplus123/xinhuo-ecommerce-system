@@ -102,17 +102,17 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         meta: { hidden: true }
       },
       {
-        // 旧版平台列表，保留备用
+        // 「业务+价格（旧版）」已删除，旧地址跳到新版
         path: 'products/classic',
-        component: () => import('@/views/Xinhuo/products/PlatformGridPage.vue'),
-        name: 'ProductPlatformsClassic',
-        meta: { title: '业务+价格（旧版）', hidden: true, canTo: true, activeMenu: '/products', guestAllowed: true }
+        redirect: '/products',
+        name: 'ProductPlatformsClassicRedirect',
+        meta: { hidden: true }
       },
       {
         path: 'products/classic/:platformId',
-        component: () => import('@/views/Xinhuo/products/BusinessListPage.vue'),
-        name: 'PlatformBusinessesClassic',
-        meta: { title: '业务商品（旧版）', hidden: true, canTo: true, activeMenu: '/products', guestAllowed: true }
+        redirect: (to) => `/products/${to.params.platformId}`,
+        name: 'PlatformBusinessesClassicRedirect',
+        meta: { hidden: true }
       },
       {
         // 新版平台页：/products/平台ID

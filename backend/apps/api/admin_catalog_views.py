@@ -4,7 +4,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from backend.apps.catalog.models import Business, Platform, QuickPhrase, SKU
+from backend.apps.catalog.models import Business, Platform, SKU
 
 from .admin_catalog_serializers import (
     AdminBusinessTreeSerializer,
@@ -25,7 +25,7 @@ class AdminCatalogPermission(permissions.BasePermission):
 
 
 def _platform_workbench_queryset():
-    sku_qs = SKU.objects.annotate(quick_phrase_count=Count("quick_phrases")).order_by("id")
+    sku_qs = SKU.objects.order_by("id")
     business_qs = Business.objects.annotate(sku_count=Count("skus")).prefetch_related(
         Prefetch("skus", queryset=sku_qs)
     ).order_by("id")
@@ -129,7 +129,7 @@ class AdminBusinessCreateAPIView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         business = serializer.save()
         business = Business.objects.annotate(sku_count=Count("skus")).prefetch_related(
-            Prefetch("skus", queryset=SKU.objects.annotate(quick_phrase_count=Count("quick_phrases")).order_by("id"))
+            Prefetch("skus", queryset=SKU.objects.order_by("id"))
         ).get(pk=business.pk)
         return Response(AdminBusinessTreeSerializer(business).data, status=status.HTTP_201_CREATED)
 
@@ -149,7 +149,7 @@ class AdminBusinessDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         business = Business.objects.annotate(sku_count=Count("skus")).prefetch_related(
-            Prefetch("skus", queryset=SKU.objects.annotate(quick_phrase_count=Count("quick_phrases")).order_by("id"))
+            Prefetch("skus", queryset=SKU.objects.order_by("id"))
         ).get(pk=instance.pk)
         return Response(AdminBusinessTreeSerializer(business).data)
 
@@ -162,7 +162,7 @@ class AdminSkuCreateAPIView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         sku = serializer.save()
-        sku = SKU.objects.annotate(quick_phrase_count=Count("quick_phrases")).get(pk=sku.pk)
+        sku = SKU.objects.get(pk=sku.pk)
         return Response(AdminSkuTreeSerializer(sku).data, status=status.HTTP_201_CREATED)
 
 
@@ -180,7 +180,7 @@ class AdminSkuDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        sku = SKU.objects.annotate(quick_phrase_count=Count("quick_phrases")).get(pk=instance.pk)
+        sku = SKU.objects.get(pk=instance.pk)
         return Response(AdminSkuTreeSerializer(sku).data)
 
 
@@ -188,7 +188,7 @@ class AdminSkuDuplicateAPIView(APIView):
     permission_classes = [AdminCatalogPermission]
 
     def post(self, request, pk):
-        source = SKU.objects.filter(pk=pk).prefetch_related("channel_tags", "quick_phrases").first()
+        source = SKU.objects.filter(pk=pk).prefetch_related("channel_tags").first()
         if source is None:
             return Response({"detail": "SKU 不存在。"}, status=status.HTTP_404_NOT_FOUND)
         base_name = (source.name or "SKU").strip() or "SKU"
@@ -205,10 +205,7 @@ class AdminSkuDuplicateAPIView(APIView):
             price_type=source.price_type,
             price_notice=source.price_notice,
             note=source.note,
-            tutorial_text=source.tutorial_text,
         )
         sku.channel_tags.set(source.channel_tags.all())
-        for qp in source.quick_phrases.all():
-            QuickPhrase.objects.create(sku=sku, content=qp.content, order=qp.order)
-        sku = SKU.objects.annotate(quick_phrase_count=Count("quick_phrases")).get(pk=sku.pk)
+        sku = SKU.objects.get(pk=sku.pk)
         return Response(AdminSkuTreeSerializer(sku).data, status=status.HTTP_201_CREATED)

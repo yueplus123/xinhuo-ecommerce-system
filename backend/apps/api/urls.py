@@ -14,8 +14,6 @@ router.register(
 )
 router.register("subscription-reminders", views.SubscriptionReminderViewSet, basename="subscription-reminder")
 router.register("material-renewals", views.MaterialRenewalViewSet, basename="material-renewal")
-router.register("common-cards", views.CommonCardViewSet, basename="common-card")
-router.register("common-accounts", views.CommonAccountViewSet, basename="common-account")
 
 urlpatterns = [
     path("auth/token/", views.ApiTokenObtainPairView.as_view(), name="token_obtain_pair"),
@@ -118,12 +116,9 @@ urlpatterns = [
         name="wechat-bot-employees",
     ),
     path("payment-tutorials/", views.PaymentTutorialListAPIView.as_view(), name="payment-tutorials"),
-    path("tutorial-pool/", views.TutorialPoolListAPIView.as_view(), name="tutorial-pool"),
-    path("phrase-pool/", views.PhrasePoolListAPIView.as_view(), name="phrase-pool"),
     path("platform-tag-pool/", views.PlatformTagPoolListAPIView.as_view(), name="platform-tag-pool"),
     path("channel-tag-pool/", views.ChannelTagPoolListAPIView.as_view(), name="channel-tag-pool"),
     path("usd-proxy-price-tiers/", views.UsdProxyPriceTierListAPIView.as_view(), name="usd-proxy-price-tiers"),
-    path("nanny-tutorials/", views.NannyTutorialListAPIView.as_view(), name="nanny-tutorials"),
     path("platform-accounts/", views.PlatformAccountListAPIView.as_view(), name="platform-accounts"),
     path("shared-apple-id-pages/", views.SharedAppleIDPageListAPIView.as_view(), name="shared-apple-id-pages"),
     path("pict-cart-pages/", views.PictCartPageListAPIView.as_view(), name="pict-cart-pages"),

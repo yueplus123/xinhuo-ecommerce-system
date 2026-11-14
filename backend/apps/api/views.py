@@ -29,7 +29,6 @@ from backend.apps.catalog.models import (
     PaymentRecord,
     PaymentRecordImage,
     PaymentTutorial,
-    PhrasePool,
     ChannelTagPool,
     Platform,
     PlatformTagPool,
@@ -43,11 +42,8 @@ from backend.apps.catalog.models import (
     SubscriptionPlatformOption,
     SubscriptionReminder,
     MaterialRenewal,
-    CommonCard,
-    CommonAccount,
     StaffLoginLog,
     StaffLoginMeta,
-    TutorialPool,
     UsdProxyPriceTier,
 )
 
@@ -57,7 +53,6 @@ from .serializers import (
     HallBlockSerializer,
     PaymentRecordSerializer,
     PaymentTutorialSerializer,
-    PhrasePoolSerializer,
     ChannelTagPoolSerializer,
     PlatformAccountSerializer,
     PlatformDetailSerializer,
@@ -70,9 +65,6 @@ from .serializers import (
     SubscriptionPlatformOptionSerializer,
     SubscriptionReminderSerializer,
     MaterialRenewalSerializer,
-    CommonCardSerializer,
-    CommonAccountSerializer,
-    TutorialPoolSerializer,
     UsdProxyPriceTierSerializer,
     UserSerializer,
     StaffLoginLogSerializer,
@@ -259,62 +251,6 @@ class MaterialRenewalViewSet(viewsets.ModelViewSet):
         obj.save(update_fields=["next_due_at", "last_renewed_at", "updated_at"])
         return Response(MaterialRenewalSerializer(obj).data)
 
-
-class CommonCardPagination(PageNumberPagination):
-    page_size = 50
-    page_size_query_param = "page_size"
-    max_page_size = 200
-
-
-class CommonCardViewSet(viewsets.ModelViewSet):
-    """常用卡：全体职员（含游客）共享增删改查。"""
-
-    permission_classes = [StaffOnlyPermission]
-    guest_allowed = True
-    serializer_class = CommonCardSerializer
-    pagination_class = CommonCardPagination
-    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
-
-    def get_queryset(self):
-        qs = CommonCard.objects.all()
-        q = (self.request.GET.get("q") or "").strip()
-        if q:
-            qs = qs.filter(
-                Q(platform__icontains=q)
-                | Q(card_number__icontains=q)
-                | Q(expiry__icontains=q)
-                | Q(remark__icontains=q)
-            )
-        return qs.order_by("-updated_at", "id")
-
-
-class CommonAccountPagination(PageNumberPagination):
-    page_size = 20
-    page_size_query_param = "page_size"
-    max_page_size = 100
-
-
-class CommonAccountViewSet(viewsets.ModelViewSet):
-    """常用卡页内账号密码小表：全体职员（含游客）共享增删改查。"""
-
-    permission_classes = [StaffOnlyPermission]
-    guest_allowed = True
-    serializer_class = CommonAccountSerializer
-    pagination_class = CommonAccountPagination
-    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
-
-    def get_queryset(self):
-        qs = CommonAccount.objects.all()
-        q = (self.request.GET.get("q") or "").strip()
-        if q:
-            qs = qs.filter(
-                Q(platform__icontains=q)
-                | Q(account__icontains=q)
-                | Q(remark__icontains=q)
-            )
-        return qs.order_by("-updated_at", "id")
-
-
 class ApiTokenObtainPairView(TokenObtainPairView):
     permission_classes = [AllowAny]
     throttle_scope = "auth"
@@ -426,8 +362,6 @@ def _filter_platforms(qs, request):
             | Q(businesses__name__icontains=q)
             | Q(businesses__skus__name__icontains=q)
             | Q(businesses__skus__note__icontains=q)
-            | Q(businesses__skus__tutorial_text__icontains=q)
-            | Q(businesses__skus__quick_phrases__content__icontains=q)
         ).distinct()
     return qs.order_by("sort_order", "id")
 
@@ -509,7 +443,6 @@ class PlatformDetailAPIView(generics.RetrieveAPIView):
             Prefetch(
                 "businesses",
                 queryset=Business.objects.prefetch_related(
-                    "skus__quick_phrases",
                     "skus__channel_tags",
                     "skus__price_items",
                     "skus__member_images",
@@ -965,23 +898,6 @@ class ChannelTagPoolListAPIView(_NamedListAPIView):
     ordering = ("order", "id")
     name_params = ("name", "q")
 
-
-class TutorialPoolListAPIView(_NamedListAPIView):
-    """教程池列表（职员端浏览 / 后续 SKU 选取）。"""
-
-    serializer_class = TutorialPoolSerializer
-    model = TutorialPool
-
-
-class PhrasePoolListAPIView(_NamedListAPIView):
-    """话术池列表（后续 SKU 选取）。"""
-
-    serializer_class = PhrasePoolSerializer
-    model = PhrasePool
-    name_params = ("q", "name")
-    search_fields_extra = ("content",)
-
-
 class UsdProxyPriceTierListAPIView(generics.ListAPIView):
     """美金代付价格池（职员端 SKU 价格展示）。"""
 
@@ -991,72 +907,6 @@ class UsdProxyPriceTierListAPIView(generics.ListAPIView):
 
     def get_queryset(self):
         return UsdProxyPriceTier.objects.all().order_by("sort_order", "id")
-
-
-def _tutorial_platform_tags_by_name():
-    """从 SKU.tutorial_text 统计各教程关联的平台标签（过渡期，待 SKU 关联表上线后替换）。"""
-    deployed = {}
-    sku_qs = (
-        SKU.objects.select_related("business__platform")
-        .prefetch_related("business__platform__platform_tags")
-        .exclude(tutorial_text="")
-        .order_by("id")
-    )
-    for sku in sku_qs:
-        platform = getattr(getattr(sku, "business", None), "platform", None)
-        if platform is None:
-            continue
-        labels = [x for x in platform.platform_tags.values_list("name", flat=True) if x] or [platform.name]
-        titles = [x.strip() for x in str(sku.tutorial_text or "").split("/") if x.strip()]
-        for title in titles:
-            bag = deployed.setdefault(title, set())
-            for lb in labels:
-                bag.add(lb)
-    return deployed
-
-
-class NannyTutorialListAPIView(APIView):
-    permission_classes = [StaffOnlyPermission]
-    guest_allowed = True
-
-    def get(self, request):
-        name_kw = (request.GET.get("name") or "").strip().lower()
-        tag_kw = (request.GET.get("tag") or "").strip()
-        tag_kw_lower = tag_kw.lower() if tag_kw else ""
-
-        tags_by_name = _tutorial_platform_tags_by_name()
-        all_tag_names = set()
-        for tags in tags_by_name.values():
-            all_tag_names.update(tags)
-
-        rows = []
-        for t in TutorialPool.objects.all().order_by("sort_order", "id"):
-            title = (t.name or "").strip()
-            if not title:
-                continue
-            if name_kw and name_kw not in title.lower():
-                continue
-            tags = sorted(tags_by_name.get(title, []))
-            if tag_kw_lower and not any(tag_kw_lower == x.lower() for x in tags):
-                continue
-            all_tag_names.update(tags)
-            rows.append(
-                {
-                    "id": t.id,
-                    "name": title,
-                    "detail_url": t.detail_url,
-                    "sort_order": t.sort_order,
-                    "platform_tags": tags,
-                }
-            )
-
-        return Response(
-            {
-                "results": rows,
-                "platform_tag_options": sorted(all_tag_names, key=lambda x: (x.lower(), x)),
-            }
-        )
-
 
 class DataScreenAPIView(APIView):
     permission_classes = [StaffOnlyPermission]

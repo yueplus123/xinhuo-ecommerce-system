@@ -32,7 +32,6 @@ from backend.apps.catalog.models import (
     PaymentTutorial,
     Platform,
     PlatformAccount,
-    QuickPhrase,
     SKU,
     Tag,
 )
@@ -80,13 +79,13 @@ class Command(BaseCommand):
                 n_sku = SKU.objects.filter(business__platform__name__startswith=SEED_PLATFORM_PREFIX).count()
             else:
                 n_plat, n_biz, n_sku = self._seed_catalog(20, 8, 15)
-            n_channel_tags, n_tutorials, n_quick_phrases = self._seed_sku_extras()
+            n_channel_tags, n_tutorials, _ = self._seed_sku_extras()
             n_pay = self._seed_payments(users)
 
         self.stdout.write(
             self.style.SUCCESS(
                 f"完成：用户 {len(users)}，平台 {n_plat}，业务 {n_biz}，SKU {n_sku}，"
-                f"渠道标签 {n_channel_tags}，支付教程 {n_tutorials}，快捷语 {n_quick_phrases}，收款记录 {n_pay}。"
+                f"渠道标签 {n_channel_tags}，支付教程 {n_tutorials}，收款记录 {n_pay}。"
             )
         )
 
@@ -249,21 +248,15 @@ class Command(BaseCommand):
         ]
         phrase_count = 0
         for sku in sku_qs:
-            tutorial_pick = random.sample(tutorials, k=5)
-            tutorial_names = [t[0] for t in tutorial_pick]
-            sku.tutorial_text = " / ".join(tutorial_names)
             if not sku.note:
                 sku.note = "seed"
-            sku.save(update_fields=["tutorial_text", "note"])
+                sku.save(update_fields=["note"])
 
             if channel_tags:
                 pick_num = random.randint(1, min(2, len(channel_tags)))
                 sku.channel_tags.set(random.sample(channel_tags, pick_num))
 
-            sku.quick_phrases.all().delete()
-            for i, content in enumerate(random.sample(phrase_templates, k=8), start=1):
-                QuickPhrase.objects.create(sku=sku, order=i * 10, content=content)
-                phrase_count += 1
+            # 话术 / 教程已移到「教程+话术」（KnowledgeEntry），这里不再给 SKU 造话术
 
         return len(channel_tags), tutorial_count, phrase_count
 

@@ -1,9 +1,10 @@
 """SKU 详细编辑 API（替代 /backoffice 的 SKU 编辑器）：仅超级管理员。
 
-GET  /api/manage/sku-editor/<id>/   读取完整详情 + 编辑所需的选项（标签 / 教程池 / 话术池）
+GET  /api/manage/sku-editor/<id>/   读取完整详情 + 编辑所需的选项（渠道标签 / 价格类型 / 状态）
 POST /api/manage/sku-editor/        新建（必须带 business）
 PUT  /api/manage/sku-editor/<id>/   保存（multipart：可同时上传 / 删除会员截图）
-价格档与快捷话术以「整表替换」方式提交（JSON 字符串字段 price_items / quick_phrases）。
+价格档以「整表替换」方式提交（JSON 字符串字段 price_items）。
+话术、教程已移到「教程+话术」（knowledge_views.py），这里不再处理。
 """
 
 import json
@@ -21,22 +22,17 @@ from rest_framework.views import APIView
 from backend.apps.catalog.models import (
     SKU,
     Business,
-    PhrasePool,
-    QuickPhrase,
     SKUImage,
     SKUPriceItem,
     Tag,
-    TutorialPool,
     UsdProxyPriceTier,
 )
 
 from .upload_utils import sniff_image_ext
 
 MAX_PRICE_ITEMS = 50
-MAX_PHRASES = 100
 MAX_IMAGES_PER_SKU = 20
 _MONEY_MAX = Decimal("1e10")
-_TUTORIAL_SEP = " / "
 
 
 class IsSuperuser(permissions.BasePermission):
@@ -88,18 +84,6 @@ def _clean_price_items(rows):
         )
     return out
 
-
-def _clean_phrases(rows):
-    if len(rows) > MAX_PHRASES:
-        raise serializers.ValidationError({"quick_phrases": f"快捷话术最多 {MAX_PHRASES} 条"})
-    out = []
-    for r in rows:
-        content = str((r.get("content") if isinstance(r, dict) else r) or "").strip()
-        if content:  # 空白条目直接忽略
-            out.append({"content": content, "order": len(out)})
-    return out
-
-
 def _int_list(raw, field):
     ids = []
     for x in _loads_list(raw, field):
@@ -113,11 +97,9 @@ def _int_list(raw, field):
 def _detail(sku, request=None):
     sku = (
         SKU.objects.select_related("business__platform")
-        .prefetch_related("price_items", "quick_phrases", "channel_tags", "member_images")
+        .prefetch_related("price_items", "channel_tags", "member_images")
         .get(pk=sku.pk)
     )
-    names = [n.strip() for n in (sku.tutorial_text or "").split(_TUTORIAL_SEP) if n.strip()]
-    tutorial_ids = list(TutorialPool.objects.filter(name__in=names).values_list("pk", flat=True))
     return {
         "id": sku.pk,
         "business": sku.business_id,
@@ -130,12 +112,10 @@ def _detail(sku, request=None):
         "price_type": sku.price_type,
         "price_notice": sku.price_notice,
         "channel_tag_ids": [t.pk for t in sku.channel_tags.all()],
-        "tutorial_ids": tutorial_ids,
         "price_items": [
             {"id": p.pk, "label": p.label, "rmb_amount": str(p.rmb_amount), "notice": p.notice}
             for p in sku.price_items.all()
         ],
-        "quick_phrases": [{"id": q.pk, "content": q.content} for q in sku.quick_phrases.all()],
         "images": [{"id": im.pk, "url": im.image.url if im.image else ""} for im in sku.member_images.all()],
     }
 
@@ -145,13 +125,6 @@ def _options():
         "channel_tags": [
             {"id": t.pk, "name": t.name}
             for t in Tag.objects.filter(type=Tag.TYPE_CHANNEL).order_by("order", "id")
-        ],
-        "tutorials": [
-            {"id": t.pk, "name": t.name} for t in TutorialPool.objects.all().order_by("sort_order", "id")
-        ],
-        "phrases": [
-            {"id": p.pk, "name": p.name, "content": p.content}
-            for p in PhrasePool.objects.all().order_by("sort_order", "id")
         ],
         "price_types": [{"value": v, "label": l} for v, l in SKU.PRICE_TYPE_CHOICES],
         "statuses": [{"value": v, "label": l} for v, l in SKU.STATUS_CHOICES],
@@ -188,20 +161,12 @@ def _save(request, sku):
             raise serializers.ValidationError({"business": "业务不存在"})
 
     prices = _clean_price_items(_loads_list(data.get("price_items"), "price_items"))
-    # 话术、教程已移到「教程+话术」，管理后台的 SKU 编辑页不再提交这两项；没提交时保留原来的数据不动
-    has_phrases = "quick_phrases" in data
-    has_tutorials = "tutorial_ids" in data
-    phrases = _clean_phrases(_loads_list(data.get("quick_phrases"), "quick_phrases")) if has_phrases else []
     tag_ids = _int_list(data.get("channel_tag_ids"), "channel_tag_ids")
-    tut_ids = _int_list(data.get("tutorial_ids"), "tutorial_ids")
     del_img_ids = _int_list(data.get("delete_image_ids"), "delete_image_ids")
 
     tags = list(Tag.objects.filter(pk__in=tag_ids, type=Tag.TYPE_CHANNEL))
     if len(tags) != len(set(tag_ids)):
         raise serializers.ValidationError({"channel_tag_ids": "包含无效的渠道标签"})
-    tutorials = {t.pk: t for t in TutorialPool.objects.filter(pk__in=tut_ids)}
-    if len(tutorials) != len(set(tut_ids)):
-        raise serializers.ValidationError({"tutorial_ids": "包含无效的教程"})
 
     files = request.FILES.getlist("images") if hasattr(request, "FILES") else []
     keep = SKUImage.objects.filter(sku=sku).exclude(pk__in=del_img_ids).count() if sku.pk else 0
@@ -218,18 +183,12 @@ def _save(request, sku):
     sku.precaution = str(data.get("precaution") or "")
     sku.price_type = price_type
     sku.price_notice = str(data.get("price_notice") or "")
-    # 教程名称按选择顺序拼接，与旧编辑器的存储格式一致
-    if has_tutorials or not sku.pk:
-        sku.tutorial_text = _TUTORIAL_SEP.join(tutorials[i].name for i in tut_ids if i in tutorials)[:500]
     sku.price = prices[0]["rmb_amount"] if prices else None  # 旧字段：取第一档
     sku.save()
     sku.channel_tags.set(tags)
 
     sku.price_items.all().delete()
     SKUPriceItem.objects.bulk_create([SKUPriceItem(sku=sku, **p) for p in prices])
-    if has_phrases:
-        sku.quick_phrases.all().delete()
-        QuickPhrase.objects.bulk_create([QuickPhrase(sku=sku, **q) for q in phrases])
 
     if del_img_ids:
         SKUImage.objects.filter(sku=sku, pk__in=del_img_ids).delete()

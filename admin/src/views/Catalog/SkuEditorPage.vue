@@ -274,21 +274,11 @@ async function submit() {
   gap: 10px;
   align-items: flex-start;
 }
-.price-row,
-.phrase-row {
+.price-row {
   width: 100%;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  align-items: center;
-}
-.phrase-row :deep(.el-textarea) {
-  flex: 1;
-  min-width: 240px;
-}
-.phrase-add {
-  display: flex;
-  gap: 10px;
   align-items: center;
 }
 .imgs {

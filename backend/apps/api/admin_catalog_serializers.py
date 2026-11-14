@@ -19,11 +19,10 @@ def _normalize_url(value: str) -> str:
 
 class AdminSkuTreeSerializer(serializers.ModelSerializer):
     status_label = serializers.CharField(source="get_status_display", read_only=True)
-    quick_phrase_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = SKU
-        fields = ("id", "business", "name", "status", "status_label", "quick_phrase_count")
+        fields = ("id", "business", "name", "status", "status_label")
 
 
 class AdminBusinessTreeSerializer(serializers.ModelSerializer):

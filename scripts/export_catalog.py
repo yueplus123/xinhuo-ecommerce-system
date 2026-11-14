@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""只读导出：平台 / 业务 / SKU 及其价格档位、注意事项、话术、教程、标签、截图地址，输出 JSON。
+"""只读导出：平台 / 业务 / SKU 及其价格档位、注意事项、标签、截图地址，以及「教程+话术」，输出 JSON。
 
 不修改任何数据（数据库以只读模式打开）。不导出账号密码、卡号、收款等敏感表。
 截图只导出文件地址（/media/...），不导出图片本身。
@@ -18,7 +18,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DB = ROOT / "backend" / "data" / "backend.sqlite3"
-TUTORIAL_SEP = " / "  # 与 backend/apps/api/manage_sku.py 的 _TUTORIAL_SEP 一致
 MEDIA_URL = "/media/"
 PRICE_TYPES = {
     "cny_single": "单一人民币",
@@ -85,13 +84,9 @@ def main():
     plat_tags = m2m("catalog_platform_platform_tags", "platform_id")
     sku_channels = m2m("catalog_sku_channel_tags", "sku_id")
 
-    tutorials = {t["name"]: t for t in q("select name, detail_url from catalog_tutorialpool")}
     prices = defaultdict(list)
     for r in q("select sku_id, label, rmb_amount, notice from catalog_skupriceitem order by sort_order, id"):
         prices[r.pop("sku_id")].append(r)
-    phrases = defaultdict(list)
-    for r in q("select sku_id, content from catalog_quickphrase order by \"order\", id"):
-        phrases[r["sku_id"]].append(r["content"])
     images = defaultdict(list)
     for r in q("select sku_id, image from catalog_skuimage order by sort_order, id"):
         if r["image"]:
@@ -99,11 +94,10 @@ def main():
 
     sku_cols = cols("catalog_sku")
     want = ["id", "name", "status", "price", "price_type", "price_notice", "precaution", "note",
-            "image", "tutorial_text", "extend_config", "business_id"]
+            "image", "extend_config", "business_id"]
     sel = ", ".join(c for c in want if c in sku_cols)
     skus_by_biz = defaultdict(list)
     for s in q(f"select {sel} from catalog_sku order by business_id, id"):
-        names = [n.strip() for n in (s.get("tutorial_text") or "").split(TUTORIAL_SEP) if n.strip()]
         # 主截图和会员截图常是同一个文件，去重
         imgs = list(dict.fromkeys(([media(s["image"])] if s.get("image") else []) + images.get(s["id"], [])))
         pt = s.get("price_type") or ""
@@ -119,8 +113,6 @@ def main():
             "note": s.get("note") or "",
             "extend_config": s.get("extend_config") or "",
             "price_items": prices.get(s["id"], []),
-            "phrases": phrases.get(s["id"], []),
-            "tutorials": [{"name": n, "url": (tutorials.get(n) or {}).get("detail_url", "")} for n in names],
             "channels": sku_channels.get(s["id"], []),
             "image_urls": imgs,
             "images": len(imgs),
@@ -144,19 +136,31 @@ def main():
     if "catalog_usdproxypricetier" in tables:
         usd_tiers = q("select usd_range, rate_percent from catalog_usdproxypricetier order by sort_order, id")
 
+    # 教程+话术（问答 / 教程 / 快捷语，按平台）
+    knowledge = []
+    if "catalog_knowledgeentry" in tables:
+        for r in q("select id, platform_id, kind, title, content, url, tutorials from catalog_knowledgeentry "
+                   "order by platform_id, kind, sort_order, id"):
+            try:
+                r["tutorials"] = json.loads(r.get("tutorials") or "[]")
+            except ValueError:
+                r["tutorials"] = []
+            knowledge.append(r)
+
     out = {
         "exported_at": date.today().isoformat(),
         "site": (args.site or detect_site()).rstrip("/"),
         "price_types": PRICE_TYPES,
         "usd_proxy_tiers": usd_tiers,
         "platforms": platforms,
+        "knowledge": knowledge,
     }
     json.dump(out, sys.stdout, ensure_ascii=False, separators=(",", ":"))
     n_b = sum(len(p["businesses"]) for p in platforms)
     skus = [s for p in platforms for b in p["businesses"] for s in b["skus"]]
     print(f"\n已导出：平台 {len(platforms)}，业务 {n_b}，SKU {len(skus)}；"
           f"渠道标签 {sum(1 for s in skus if s['channels'])} 个 SKU 有，"
-          f"截图 {sum(s['images'] for s in skus)} 张，美金代付价格档 {len(usd_tiers)} 条；"
+          f"截图 {sum(s['images'] for s in skus)} 张，美金代付价格档 {len(usd_tiers)} 条，教程+话术 {len(knowledge)} 条；"
           f"截图站点：{out['site'] or '未识别，请加 --site'}（只读，未修改数据）", file=sys.stderr)
 
 

@@ -186,7 +186,6 @@ class SKU(models.Model):
     precaution = models.TextField(blank=True, verbose_name="注意事项")
     note = models.CharField(max_length=500, blank=True, verbose_name="备注")
     image = models.ImageField(upload_to="sku_screenshots/", blank=True, null=True, verbose_name="会员截图")
-    tutorial_text = models.CharField(max_length=500, blank=True, verbose_name="对应教程")
     extend_config = models.CharField(max_length=500, blank=True, verbose_name="扩展配置")
     business = models.ForeignKey(
         Business,
@@ -248,48 +247,6 @@ class SKUImage(models.Model):
 
     def __str__(self) -> str:
         return f"{self.sku_id} #{self.sort_order}"
-
-
-class QuickPhrase(models.Model):
-    content = models.TextField(verbose_name="内容")
-    order = models.PositiveIntegerField(default=0, verbose_name="排序")
-    sku = models.ForeignKey(
-        SKU,
-        on_delete=models.CASCADE,
-        related_name="quick_phrases",
-        verbose_name="SKU",
-    )
-
-    class Meta:
-        ordering = ["order", "id"]
-
-    def __str__(self) -> str:
-        return (self.content or "")[:40]
-
-
-class PhrasePool(models.Model):
-    """话术池：SKU 编辑时从中选取，不再批量发送到 SKU。"""
-
-    name = models.CharField(max_length=200, verbose_name="名称")
-    content = models.TextField(verbose_name="内容")
-    sort_order = models.PositiveIntegerField(
-        default=0,
-        help_text="数字越小越靠前。",
-        verbose_name="排序",
-    )
-
-    class Meta:
-        ordering = ["sort_order", "id"]
-        unique_together = (("name", "content"),)
-        verbose_name = "话术池"
-        verbose_name_plural = "话术池"
-
-    def __str__(self) -> str:
-        return self.name
-
-
-# 兼容旧代码引用
-QuickPhraseTemplate = PhrasePool
 
 
 class HallBlock(models.Model):
@@ -569,69 +526,6 @@ class MaterialRenewal(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} · {self.next_due_at}"
-
-
-class CommonCard(models.Model):
-    """常用卡：共享卡号台账，职员/游客均可增删改查。"""
-
-    platform = models.CharField(max_length=100, verbose_name="平台")
-    card_number = models.CharField(max_length=64, verbose_name="卡号")
-    expiry = models.CharField(max_length=16, verbose_name="有效期")
-    cvv = models.CharField(max_length=8, verbose_name="安全码")
-    remark = models.CharField(max_length=500, blank=True, default="", verbose_name="备注/平台")
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="最近更改日期")
-
-    class Meta:
-        ordering = ["-updated_at", "id"]
-        verbose_name = "常用卡"
-        verbose_name_plural = "常用卡"
-
-    def __str__(self) -> str:
-        return f"{self.platform} · {self.card_number}"
-
-
-class CommonAccount(models.Model):
-    """常用卡页内的账号密码小表，职员/游客均可增删改查。"""
-
-    platform = models.CharField(max_length=100, verbose_name="平台")
-    account = models.CharField(max_length=200, verbose_name="账号")
-    password = models.CharField(max_length=500, verbose_name="密码")
-    remark = models.CharField(max_length=500, blank=True, default="", verbose_name="备注")
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
-
-    class Meta:
-        ordering = ["-updated_at", "id"]
-        verbose_name = "常用账号"
-        verbose_name_plural = "常用账号"
-
-    def __str__(self) -> str:
-        return f"{self.platform} · {self.account}"
-
-
-class TutorialPool(models.Model):
-    """教程池：SKU 编辑时从中选取，不再批量发送到 SKU。"""
-
-    name = models.CharField(max_length=200, verbose_name="名称")
-    detail_url = models.URLField(verbose_name="详情链接")
-    sort_order = models.PositiveIntegerField(
-        default=0,
-        help_text="数字越小越靠前。",
-        verbose_name="排序",
-    )
-
-    class Meta:
-        ordering = ["sort_order", "id"]
-        verbose_name = "教程池"
-        verbose_name_plural = "教程池"
-
-    def __str__(self) -> str:
-        return self.name
-
-
-# 兼容旧代码引用
-TutorialDeployTemplate = TutorialPool
 
 
 class UsdProxyPriceTier(models.Model):

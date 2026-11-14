@@ -29,11 +29,9 @@ from backend.apps.catalog.models import (
     Business,
     PaymentTutorial,
     Platform,
-    QuickPhrase,
     SKU,
     SKUPriceItem,
     Tag,
-    TutorialPool,
 )
 
 DEMO_PREFIX = "演示·"
@@ -406,7 +404,6 @@ def purge_demo_platforms():
 def ensure_tutorials():
     for i, (name, url) in enumerate(TUTORIAL_CATALOG):
         PaymentTutorial.objects.update_or_create(name=name, defaults={"detail_url": url, "sort_order": i * 10})
-        TutorialPool.objects.update_or_create(name=name, defaults={"detail_url": url, "sort_order": i * 10})
 
 
 def ensure_channel_tags():
@@ -448,14 +445,7 @@ def apply_sku_enrichment(sku, cfg, channel_map, tutorial_names):
             sort_order=order * 10,
         )
 
-    picked_t = [tutorial_names[i] for i in cfg.get("tutorial_idx", []) if i < len(tutorial_names)]
-    sku.tutorial_text = " / ".join(picked_t)
-    sku.save(update_fields=["tutorial_text"])
-
-    sku.quick_phrases.all().delete()
-    for order, idx in enumerate(cfg.get("phrase_idx", []), start=1):
-        if idx < len(PHRASE_POOL):
-            QuickPhrase.objects.create(sku=sku, order=order * 10, content=PHRASE_POOL[idx])
+    # 话术 / 教程已移到「教程+话术」（KnowledgeEntry），这里不再写到 SKU 上
 
     channel_names = cfg.get("channels") or []
     sku.channel_tags.set([channel_map[n] for n in channel_names if n in channel_map])

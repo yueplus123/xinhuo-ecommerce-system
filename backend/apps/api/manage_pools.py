@@ -1,8 +1,8 @@
-"""管理后台 API：话术池 / 教程池 / 平台标签池 / 渠道池 / 美金代付价格池 / SKU 快捷语。
+"""管理后台 API：平台标签池 / 渠道池 / 美金代付价格池。
 
 替代 /backoffice 中对应的 HTML 页面（全部仅超级用户可用，与旧 superuser_required 一致）。
 校验直接复用旧的 Django ModelForm，保证与旧后台规则一致。
-机器人使用的只读接口（/api/tutorial-pool/ 等）不在此处，保持不变。
+话术池 / 教程池 / SKU 快捷话术已删除，内容都在「教程+话术」（knowledge_views.py）。
 """
 
 from django.db import IntegrityError, transaction
@@ -16,21 +16,14 @@ from rest_framework.views import APIView
 from backend.apps.catalog.forms import (
     ChannelTagPoolForm,
     ChannelTagPoolQuickForm,
-    PhrasePoolForm,
     PlatformTagPoolForm,
     PlatformTagPoolQuickForm,
-    QuickPhraseForm,
-    TutorialPoolForm,
     UsdProxyPriceTierForm,
 )
 from backend.apps.catalog.models import (
-    SKU,
     ChannelTagPool,
-    PhrasePool,
     PlatformTagPool,
-    QuickPhrase,
     Tag,
-    TutorialPool,
     UsdProxyPriceTier,
 )
 
@@ -43,22 +36,6 @@ class SuperuserOnly(permissions.BasePermission):
 
 # order_field：排序字段；append：新增时排到末尾（旧后台行为）；reorderable：支持拖动排序
 POOLS = {
-    "phrase-pool": {
-        "model": PhrasePool,
-        "form": PhrasePoolForm,
-        "order_field": "sort_order",
-        "append": True,
-        "reorderable": True,
-        "fields": ("name", "content", "sort_order"),
-    },
-    "tutorial-pool": {
-        "model": TutorialPool,
-        "form": TutorialPoolForm,
-        "order_field": "sort_order",
-        "append": True,
-        "reorderable": True,
-        "fields": ("name", "detail_url", "sort_order"),
-    },
     "platform-tag-pool": {
         "model": PlatformTagPool,
         "form": PlatformTagPoolForm,
@@ -87,14 +64,6 @@ POOLS = {
         "reorderable": True,
         "fields": ("usd_range", "rate_percent", "sort_order"),
     },
-    "quick-phrases": {
-        "model": QuickPhrase,
-        "form": QuickPhraseForm,
-        "order_field": "order",
-        "append": False,
-        "reorderable": False,
-        "fields": ("sku", "content", "order"),
-    },
 }
 
 
@@ -106,8 +75,6 @@ def _cfg(key):
 
 
 def _value(obj, field):
-    if field == "sku":
-        return obj.sku_id
     val = getattr(obj, field)
     return float(val) if field == "rate_percent" else val
 
@@ -116,19 +83,11 @@ def _row(cfg, obj):
     data = {"id": obj.pk}
     for f in cfg["fields"]:
         data[f] = _value(obj, f)
-    if cfg["model"] is QuickPhrase:
-        sku = obj.sku
-        data["sku_name"] = sku.name
-        data["business_name"] = sku.business.name
-        data["platform_name"] = sku.business.platform.name
-        data["sku_label"] = f"{sku.business.platform.name} / {sku.business.name} / {sku.name}"
     return data
 
 
 def _queryset(cfg):
     qs = cfg["model"].objects.all()
-    if cfg["model"] is QuickPhrase:
-        qs = qs.select_related("sku__business__platform")
     return qs.order_by(cfg["order_field"], "id")
 
 
@@ -199,10 +158,6 @@ class PoolListCreateView(APIView):
     def get(self, request, key):
         cfg = _cfg(key)
         qs = _queryset(cfg)
-        if cfg["model"] is QuickPhrase:
-            sku_id = request.query_params.get("sku")
-            if sku_id and sku_id.isdigit():
-                qs = qs.filter(sku_id=int(sku_id))
         rows = [_row(cfg, o) for o in qs]
         return Response({"count": len(rows), "results": rows, "reorderable": cfg["reorderable"]})
 
@@ -296,22 +251,7 @@ class PoolQuickAddView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
-
-class QuickPhraseSkuOptionsView(APIView):
-    permission_classes = [SuperuserOnly]
-
-    def get(self, request):
-        skus = SKU.objects.select_related("business__platform").order_by("business__platform__name", "business__name", "name")
-        return Response(
-            [
-                {"id": s.pk, "label": f"{s.business.platform.name} / {s.business.name} / {s.name}"}
-                for s in skus
-            ]
-        )
-
-
 urlpatterns = [
-    path("manage/pools/quick-phrases/sku-options/", QuickPhraseSkuOptionsView.as_view(), name="manage-pools-sku-options"),
     path("manage/pools/<str:key>/", PoolListCreateView.as_view(), name="manage-pool-list"),
     path("manage/pools/<str:key>/reorder/", PoolReorderView.as_view(), name="manage-pool-reorder"),
     path("manage/pools/<str:key>/quick-add/", PoolQuickAddView.as_view(), name="manage-pool-quick-add"),

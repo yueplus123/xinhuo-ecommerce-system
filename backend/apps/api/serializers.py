@@ -7,10 +7,8 @@ from backend.apps.catalog.models import (
     ChannelTagPool,
     HallBlock,
     PaymentRecord,
-    PhrasePool,
     Platform,
     PlatformTagPool,
-    QuickPhrase,
     SKU,
     SKUPriceItem,
     Tag,
@@ -23,10 +21,7 @@ from backend.apps.catalog.models import (
     SubscriptionPlatformOption,
     SubscriptionReminder,
     MaterialRenewal,
-    CommonCard,
-    CommonAccount,
     StaffLoginLog,
-    TutorialPool,
     UsdProxyPriceTier,
 )
 
@@ -100,13 +95,6 @@ class ChannelTagPoolSerializer(serializers.ModelSerializer):
         model = ChannelTagPool
         fields = ("id", "name", "order")
 
-
-class QuickPhraseSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = QuickPhrase
-        fields = ("id", "content", "order")
-
-
 class SKUPriceItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = SKUPriceItem
@@ -115,7 +103,6 @@ class SKUPriceItemSerializer(serializers.ModelSerializer):
 
 class SKUSerializer(serializers.ModelSerializer):
     channel_tags = TagSerializer(many=True, read_only=True)
-    quick_phrases = QuickPhraseSerializer(many=True, read_only=True)
     price_items = serializers.SerializerMethodField()
     price_type = serializers.SerializerMethodField()
     price_type_label = serializers.SerializerMethodField()
@@ -140,8 +127,6 @@ class SKUSerializer(serializers.ModelSerializer):
             "price_items",
             "image_url",
             "image_urls",
-            "tutorial_text",
-            "quick_phrases",
         )
 
     def _media_url(self, url):
@@ -319,24 +304,10 @@ class PaymentTutorialSerializer(serializers.ModelSerializer):
         model = PaymentTutorial
         fields = ("id", "name", "detail_url", "sort_order")
 
-
-class TutorialPoolSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TutorialPool
-        fields = ("id", "name", "detail_url", "sort_order")
-
-
 class UsdProxyPriceTierSerializer(serializers.ModelSerializer):
     class Meta:
         model = UsdProxyPriceTier
         fields = ("id", "usd_range", "rate_percent", "sort_order")
-
-
-class PhrasePoolSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PhrasePool
-        fields = ("id", "name", "content", "sort_order")
-
 
 class PlatformAccountSerializer(serializers.ModelSerializer):
     class Meta:
@@ -463,82 +434,3 @@ class MaterialRenewalSerializer(serializers.ModelSerializer):
             if not days or int(days) < 1:
                 raise serializers.ValidationError({"cycle_days": "自定义天数请填写 ≥ 1 的整数。"})
         return attrs
-
-
-class CommonCardSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CommonCard
-        fields = (
-            "id",
-            "platform",
-            "card_number",
-            "expiry",
-            "cvv",
-            "remark",
-            "created_at",
-            "updated_at",
-        )
-        read_only_fields = ("created_at", "updated_at")
-
-    def validate_platform(self, value):
-        v = (value or "").strip()
-        if not v:
-            raise serializers.ValidationError("请填写平台。")
-        return v[:100]
-
-    def validate_card_number(self, value):
-        v = (value or "").strip()
-        if not v:
-            raise serializers.ValidationError("请填写卡号。")
-        return v[:64]
-
-    def validate_expiry(self, value):
-        v = (value or "").strip()
-        if not v:
-            raise serializers.ValidationError("请填写有效期。")
-        return v[:16]
-
-    def validate_cvv(self, value):
-        v = (value or "").strip()
-        if not v:
-            raise serializers.ValidationError("请填写安全码。")
-        return v[:8]
-
-    def validate_remark(self, value):
-        return (value or "").strip()[:500]
-
-
-class CommonAccountSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CommonAccount
-        fields = (
-            "id",
-            "platform",
-            "account",
-            "password",
-            "remark",
-            "created_at",
-            "updated_at",
-        )
-        read_only_fields = ("created_at", "updated_at")
-
-    def validate_platform(self, value):
-        v = (value or "").strip()
-        if not v:
-            raise serializers.ValidationError("请填写平台。")
-        return v[:100]
-
-    def validate_account(self, value):
-        v = (value or "").strip()
-        if not v:
-            raise serializers.ValidationError("请填写账号。")
-        return v[:200]
-
-    def validate_password(self, value):
-        v = (value or "").strip()
-        if not v:
-            raise serializers.ValidationError("请填写密码。")
-        return v[:500]
-
-    def validate_remark(self, value):
-        return (value or "").strip()[:500]

@@ -19,12 +19,10 @@ from .models import (
     HallBlock,
     PAYMENT_CHANNELS,
     PaymentTutorial,
-    PhrasePool,
     Platform,
     PlatformAccount,
     PlatformTagPool,
     PaymentRecord,
-    QuickPhrase,
     SharedAppleIDPage,
     PictCartPage,
     FanboxStatsPage,
@@ -35,7 +33,6 @@ from .models import (
     SubscriptionPlatformOption,
     SubscriptionReminder,
     Tag,
-    TutorialPool,
     UsdProxyPriceTier,
 )
 
@@ -93,14 +90,6 @@ class SKUForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["channel_tags"].queryset = Tag.objects.filter(type=Tag.TYPE_CHANNEL).order_by("order", "id")
-
-
-class QuickPhraseForm(forms.ModelForm):
-    class Meta:
-        model = QuickPhrase
-        fields = ("sku", "content", "order")
-        widgets = {"content": forms.Textarea(attrs={"rows": 4})}
-
 
 class HallBlockForm(forms.ModelForm):
     class Meta:
@@ -434,35 +423,6 @@ class PaymentTutorialForm(forms.ModelForm):
             raise ValidationError("请输入有效的链接。") from exc
         return value
 
-
-class TutorialPoolForm(forms.ModelForm):
-    detail_url = forms.CharField(
-        label="详情链接",
-        widget=forms.TextInput(attrs={"placeholder": "例如：example.com/guide/fanbox"}),
-    )
-
-    class Meta:
-        model = TutorialPool
-        fields = ("name", "detail_url")
-
-    def clean_detail_url(self):
-        value = normalize_url_value(self.cleaned_data.get("detail_url"))
-        if not value:
-            raise ValidationError("请输入详情链接。")
-        try:
-            URLValidator()(value)
-        except ValidationError as exc:
-            raise ValidationError("请输入有效的链接。") from exc
-        return value
-
-
-class PhrasePoolForm(forms.ModelForm):
-    class Meta:
-        model = PhrasePool
-        fields = ("name", "content")
-        widgets = {"content": forms.Textarea(attrs={"rows": 6})}
-
-
 class SharedAppleIDPageForm(forms.ModelForm):
     share_url = forms.CharField(
         label="分享页链接",
@@ -637,17 +597,6 @@ class SKUPriceItemForm(forms.ModelForm):
             "sort_order": forms.NumberInput(attrs={"min": "0"}),
         }
 
-
-class QuickPhraseEditorForm(forms.ModelForm):
-    class Meta:
-        model = QuickPhrase
-        fields = ("content", "order")
-        widgets = {
-            "content": forms.Textarea(attrs={"rows": 2}),
-            "order": forms.NumberInput(attrs={"min": "0"}),
-        }
-
-
 SKUPriceItemFormSet = inlineformset_factory(
     SKU,
     SKUPriceItem,
@@ -655,56 +604,3 @@ SKUPriceItemFormSet = inlineformset_factory(
     extra=2,
     can_delete=True,
 )
-
-QuickPhraseEditorFormSet = inlineformset_factory(
-    SKU,
-    QuickPhrase,
-    form=QuickPhraseEditorForm,
-    extra=0,
-    can_delete=True,
-)
-
-
-class SKUEditorForm(forms.ModelForm):
-    tutorial_pool = forms.ModelMultipleChoiceField(
-        queryset=TutorialPool.objects.all(),
-        required=False,
-        widget=forms.CheckboxSelectMultiple,
-        label="教程",
-    )
-
-    class Meta:
-        model = SKU
-        fields = (
-            "business",
-            "name",
-            "status",
-            "precaution",
-            "price_type",
-            "price_notice",
-            "channel_tags",
-        )
-        widgets = {
-            "precaution": forms.Textarea(attrs={"rows": 4, "placeholder": "职员端 SKU 卡片上显示的注意事项"}),
-            "price_notice": forms.Textarea(attrs={"rows": 3, "placeholder": "价格弹层内整组说明（可选）"}),
-            "channel_tags": forms.CheckboxSelectMultiple(),
-        }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["channel_tags"].queryset = Tag.objects.filter(type=Tag.TYPE_CHANNEL).order_by("order", "id")
-        self.fields["tutorial_pool"].queryset = TutorialPool.objects.all().order_by("sort_order", "id")
-        if self.instance.pk:
-            names = [n.strip() for n in (self.instance.tutorial_text or "").split(" / ") if n.strip()]
-            if names:
-                self.initial["tutorial_pool"] = TutorialPool.objects.filter(name__in=names)
-
-    def save(self, commit=True):
-        sku = super().save(commit=False)
-        pools = self.cleaned_data.get("tutorial_pool") or []
-        sku.tutorial_text = " / ".join(p.name for p in pools)
-        if commit:
-            sku.save()
-            self.save_m2m()
-        return sku
-
