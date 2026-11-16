@@ -37,6 +37,7 @@ export const NAV_GROUPS: NavGroup[] = [
         path: '/knowledge',
         icon: 'Notebook'
       },
+      { title: '日元充值汇率', desc: '自动汇率 + 系数（职员端大厅顶部、企微群每天 08:30 推送）', path: '/card-fx', icon: 'Money' },
       { title: '平台标签池', desc: '平台的标签选项', path: '/platform-tag-pool', icon: 'PriceTag' },
       { title: '渠道池', desc: 'SKU 的渠道标签选项', path: '/channel-tag-pool', icon: 'Share' },
       { title: '美金代付价格池', desc: '按美金区间的代付费率', path: '/usd-proxy-price-pool', icon: 'Coin' }

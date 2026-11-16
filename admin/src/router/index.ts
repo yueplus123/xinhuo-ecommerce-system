@@ -28,6 +28,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'tutorial-pool', redirect: '/knowledge' },
       { path: 'phrase-pool', redirect: '/knowledge' },
       { path: 'quick-phrases', redirect: '/knowledge' },
+      page('日元充值汇率', 'card-fx', () => import('@/views/Pools/CardFxPage.vue')),
       page('平台标签池', 'platform-tag-pool', () => import('@/views/Pools/PlatformTagPoolPage.vue')),
       page('渠道池', 'channel-tag-pool', () => import('@/views/Pools/ChannelTagPoolPage.vue')),
       page('美金代付价格池', 'usd-proxy-price-pool', () => import('@/views/Pools/UsdProxyPricePoolPage.vue')),

@@ -58,3 +58,23 @@ cd backend
 ```
 
 首次执行清理命令必须使用 `--dry-run` 核对结果。
+
+### 日元充值汇率
+
+职员端大厅顶部显示「日元充值该充多少美元」，系数在管理后台「日元充值汇率」页修改（仅超级管理员）。
+
+```bash
+# 测试服务器能连上哪些汇率接口（不写库）
+PYTHONPATH=. .venv/bin/python backend/manage.py fetch_card_fx_rate --test
+PYTHONPATH=. .venv/bin/python backend/manage.py fetch_card_fx_rate          # 取数并保存
+PYTHONPATH=. .venv/bin/python backend/manage.py send_card_fx_wecom --dry-run  # 只打印推送内容
+```
+
+crontab（每天，含周末）：
+
+```
+CRON_TZ=Asia/Shanghai
+30 23 * * * cd /var/www/xinhuo/app && PYTHONPATH=. .venv/bin/python backend/manage.py fetch_card_fx_rate >> /var/log/xinhuo-card-fx.log 2>&1
+0 8 * * *   cd /var/www/xinhuo/app && PYTHONPATH=. .venv/bin/python backend/manage.py fetch_card_fx_rate >> /var/log/xinhuo-card-fx.log 2>&1
+30 8 * * *  cd /var/www/xinhuo/app && PYTHONPATH=. .venv/bin/python backend/manage.py send_card_fx_wecom >> /var/log/xinhuo-card-fx.log 2>&1
+```

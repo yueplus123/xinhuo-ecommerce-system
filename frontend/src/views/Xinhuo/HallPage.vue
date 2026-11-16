@@ -13,6 +13,7 @@ import { ContentWrap } from '@/components/ContentWrap'
 import { BaseButton } from '@/components/Button'
 import { Icon } from '@/components/Icon'
 import { listHallBlocks } from '@/api/xinhuo/dashboard'
+import CardFxStrip from './components/CardFxStrip.vue'
 
 defineOptions({ name: 'Hall' })
 
@@ -143,6 +144,7 @@ onMounted(load)
     title="大厅"
     message="放与具体商品无关的杂项资料：排班、规范、话术、通道说明、常用入口等。"
   >
+    <CardFxStrip />
     <div class="hall-toolbar mb-16px">
       <ElInput
         v-model="q"

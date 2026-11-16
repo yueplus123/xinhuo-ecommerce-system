@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -1178,3 +1180,43 @@ class KnowledgeEntry(models.Model):
 
     def __str__(self) -> str:
         return f"[{self.get_kind_display()}] {self.title}"
+
+
+class CardFxRate(models.Model):
+    """日元充值汇率：每天一条（按汇率数据自身的日期），由 fetch_card_fx_rate 命令自动取数。"""
+
+    rate_date = models.DateField(unique=True, verbose_name="汇率日期")
+    usd_jpy = models.DecimalField(max_digits=12, decimal_places=4, verbose_name="1 美元 = 日元")
+    usd_cny = models.DecimalField(max_digits=12, decimal_places=4, verbose_name="1 美元 = 人民币")
+    source = models.CharField(max_length=32, default="frankfurter", verbose_name="数据来源")
+    fetched_at = models.DateTimeField(auto_now=True, verbose_name="取数时间")
+
+    class Meta:
+        ordering = ["-rate_date"]
+        verbose_name = "日元充值汇率"
+        verbose_name_plural = "日元充值汇率"
+
+    def __str__(self) -> str:
+        return f"{self.rate_date} USD/JPY {self.usd_jpy}"
+
+
+class CardFxSettings(models.Model):
+    """日元充值汇率的设置（只有一行）：系数 factor，只能在管理后台改。"""
+
+    factor = models.DecimalField(max_digits=6, decimal_places=4, default=Decimal("1.0250"), verbose_name="系数")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="最后修改人",
+    )
+
+    class Meta:
+        verbose_name = "日元充值汇率设置"
+        verbose_name_plural = "日元充值汇率设置"
+
+    def __str__(self) -> str:
+        return f"系数 {self.factor}"
