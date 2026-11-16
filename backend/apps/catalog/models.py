@@ -184,6 +184,11 @@ class SKU(models.Model):
     )
     price_notice = models.TextField(blank=True, verbose_name="价格整组注意事项")
     precaution = models.TextField(blank=True, verbose_name="注意事项")
+    # 质保条件：在管理后台商品编辑里填写，职员端「业务+价格」详情右上角显示，所有人看到的一样
+    warranty = models.CharField(max_length=50, blank=True, default="", verbose_name="质保期",
+                                help_text="比如：不质保 / 24 小时 / 7 天 / 30 天 / 会员到期前；留空 = 未填写")
+    warranty_note = models.TextField(blank=True, default="", verbose_name="质保说明",
+                                     help_text="一条一行或用；隔开。带「不保 / 不包」的显示为 ✕，带「包换 / 补 / 找回」的显示为 ✓")
     note = models.CharField(max_length=500, blank=True, verbose_name="备注")
     image = models.ImageField(upload_to="sku_screenshots/", blank=True, null=True, verbose_name="会员截图")
     extend_config = models.CharField(max_length=500, blank=True, verbose_name="扩展配置")

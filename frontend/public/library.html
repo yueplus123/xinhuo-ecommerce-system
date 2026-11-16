@@ -199,6 +199,28 @@ body.lock{overflow:hidden}
 .thumb.on{border-color:var(--tb)}
 .thumb img{width:100%;height:100%;object-fit:cover}
 .info{display:flex;flex-direction:column;gap:12px;min-width:0}
+/* 质保条件：价格 / 标题的右边 */
+.itop{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,330px);gap:14px;align-items:start}
+.itop .il{display:flex;flex-direction:column;gap:12px;min-width:0}
+.wty{border:1.5px solid var(--tb);background:var(--card);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;min-width:0;box-shadow:0 2px 0 var(--green-line)}
+.wty .wh{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.wty .wk{font-size:14px;font-weight:700;color:var(--ink)}
+.wty .wv{display:inline-flex;align-items:center;gap:5px;font-size:18px;font-weight:800;line-height:1;padding:7px 12px;border-radius:999px;background:var(--tb);color:#fff;white-space:nowrap}
+.wty .wv svg{width:17px;height:17px}
+.wty ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
+.wty li{display:flex;gap:7px;font-size:13.5px;line-height:1.55;color:var(--ink2);overflow-wrap:anywhere}
+.wty li .m{flex:none;width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;margin-top:1px}
+.wty li.ok .m{background:var(--green-bg);color:var(--ok);border:1px solid var(--green-line)}
+.wty li.no .m{background:#FDECEC;color:#C24141;border:1px solid #F3C4C4}
+html.dark .wty li.no .m{background:#3A1F1F;color:#F09A9A;border-color:#6A2E2E}
+.wty li.tx .m{background:var(--soft);color:var(--muted);border:1px solid var(--line2)}
+.wty b.ok{color:var(--ok)} .wty b.no{color:#C24141} html.dark .wty b.no{color:#F09A9A}
+.wty.none{border-color:#C9A3A3;box-shadow:0 2px 0 #F3DADA}
+.wty.none .wv{background:#8A9690}
+.wty.empty{border:1.5px dashed var(--line2);box-shadow:none;background:transparent;padding:8px 12px}
+.wty.empty .wk{color:var(--muted);font-weight:600}
+.wty.empty .wv{background:transparent;color:var(--faint);padding:0;font-size:14px;font-weight:600}
+@media (max-width:900px){ .itop{grid-template-columns:minmax(0,1fr)} }
 .price{color:var(--tb);font-weight:700;display:flex;align-items:baseline;gap:2px;flex-wrap:wrap}
 .price .y{font-size:18px}.price .v{font-size:32px;line-height:1.1}
 .price .f{font-size:20px;line-height:1.4}
@@ -480,6 +502,26 @@ function tierTable(s){
   if (isUsd(s)) h += USD_TIERS.length ? '<div class="faint" style="font-size:12px;margin:6px 0">美金代付价格表（所有“按美金代付收费”的档位共用）</div><table class="tiers"><thead><tr><th>美金区间</th><th>费率</th></tr></thead><tbody>'+USD_TIERS.map(function(t){ return '<tr><td>'+esc(t.usd_range)+'</td><td class="p mono">'+money(t.rate_percent)+'%</td></tr>'; }).join('')+'</tbody></table>' : '<div class="faint">美金代付价格表还没设置</div>';
   return h;
 }
+// ---------- 质保条件（在管理后台商品编辑里填写，所有人看到的一样）----------
+var SHIELD='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>';
+// 质保说明按「；」或换行分成一条条：带「不保 / 不质保 / 不包」的算 ✗，带「包换 / 补 / 找回…」的算 ✓，其余是普通说明
+var W_NO=/(不(?:另外|再|提供|予|给|做)?(?:质保|保修|保|包换|包补|包|退款|退|负责)|无法质保|概不)/, W_OK=/(包换|包补|免费补|补发|补卡|换新|可以找回|找回|退款|保修)/;
+function wtyItems(note){
+  return String(note||'').split(/[；;\n]+/).map(function(t){ return t.trim().replace(/[。.]$/,''); }).filter(Boolean).map(function(t){
+    var kind = W_NO.test(t) ? 'no' : (W_OK.test(t) ? 'ok' : 'tx');
+    var h = esc(t).replace(kind==='no'?W_NO:W_OK, function(m){ return '<b class="'+(kind==='no'?'no':'ok')+'">'+m+'</b>'; });
+    return '<li class="'+kind+'"><span class="m">'+(kind==='ok'?'✓':kind==='no'?'✕':'•')+'</span><span>'+h+'</span></li>';
+  }).join('');
+}
+function wtyCard(s){
+  var w=(s.warranty||'').trim(), note=(s.warranty_note||'').trim();
+  if (!w) return '<div class="wty empty"><div class="wh"><span class="wk">质保条件：</span><span class="wv">未填写</span></div></div>';
+  var none = w==='不质保';
+  var items = wtyItems(note);
+  return '<div class="wty'+(none?' none':'')+'"><div class="wh"><span class="wk">质保条件：</span><span class="wv">'+(none?'':SHIELD)+esc(w)+'</span></div>'
+    + (items?'<ul>'+items+'</ul>':'')
+    + '</div>';
+}
 function renderDrawer(){
   var p=P(), b=B(), s=S(), shots=s.images;
   if (st.img>shots) st.img=0;
@@ -506,9 +548,11 @@ function renderDrawer(){
   var tt = tierTable(s);
 
   var h = '<section class="card prod"><div class="gal">'+main+'<div class="thumbs'+(shots?'':' solo')+'">'+th+'</div></div><div class="info">'
+    + '<div class="itop"><div class="il">'
     + '<div class="price">'+price+'</div>'
     + '<h3 class="title" id="dTitle">'+esc(b.name)+' · '+esc(s.name)+'</h3>'
-    + '<div class="badges">'+bd.join('')+'</div>'
+    + (bd.length?'<div class="badges">'+bd.join('')+'</div>':'')
+    + '</div>'+wtyCard(s)+'</div>'
     + '<div class="rows">'
     + '<div class="r"><span class="k">档位</span><div class="opts">'+opts+'</div></div>'
     + '<div class="r"><span class="k t">收款渠道</span>'+(s.channels.length?'<div class="chan">'+s.channels.map(function(c){ return '<span>'+esc(c)+'</span>'; }).join('')+'</div>':'<span class="faint">未设置</span>')+'</div>'
@@ -524,7 +568,7 @@ function renderDrawer(){
   if (s.precaution) h += '<section class="card blk"><div class="bh"><h4>注意事项</h4></div><div class="txt">'+esc(s.precaution.replace(/\t/g,'\n'))+'</div></section>';
   var miss=[];
   if (!s.price_notice && !skuPrices(s).length && !isUsd(s)) miss.push('价格');
-  if (!s.precaution) miss.push('注意事项'); if (!shots) miss.push('会员截图'); if (!s.channels.length) miss.push('收款渠道');
+  if (!s.warranty) miss.push('质保'); if (!s.precaution) miss.push('注意事项'); if (!shots) miss.push('会员截图'); if (!s.channels.length) miss.push('收款渠道');
   if (miss.length) h += '<section class="card blk"><div class="bh"><h4>还缺什么</h4></div><div class="missing">这个档位还没填：<b>'+miss.join('、')+'</b></div></section>';
   $('dbody').innerHTML = h;
 
@@ -608,9 +652,16 @@ function quoteText(b,s){
   if (isUsd(s) && USD_TIERS.length) out+='\n按美金代付收费：'+USD_TIERS.map(function(t){ return t.usd_range+' '+money(t.rate_percent)+'%'; }).join('，');
   return out;
 }
+// 复制报价时带上质保条件（全平台价格表不带，太长）
+function warrantyText(s){
+  if (!s.warranty) return '';
+  var lines=String(s.warranty_note||'').split(/[；;\n]+/).map(function(t){ return t.trim(); }).filter(Boolean)
+    .map(function(t){ return (W_NO.test(t)?'✕ ':W_OK.test(t)?'✓ ':'• ')+t; });
+  return '\n质保条件：'+s.warranty+(lines.length?'\n'+lines.join('\n'):'');
+}
 function copyWhat(k){
   var p=P();
-  if (k==='quote') return p.name+' '+quoteText(B(),S());
+  if (k==='quote') return p.name+' '+quoteText(B(),S())+warrantyText(S());
   if (k==='ways'){ var ws=p.businesses.filter(function(b){ return !bizOff(b); });
     return p.name+' 目前有这几种方式：\n'+ws.map(function(b,i){ var r=rangeText(bizPrices(b)), o=onSale(b); return (i+1)+'. '+b.name+'（'+o.map(function(k){return k.name;}).join(' / ')+'）'+((r||(o[0]&&o[0].price_notice))?'：'+(r||o[0].price_notice):''); }).join('\n')+'\n\n你看想要哪一种，我给你详细说～'; }
   if (k==='allprices') return p.name+' 价格表\n'+p.businesses.map(function(b){ return onSale(b).map(function(s){ return quoteText(b,s); }).join('\n'); }).filter(Boolean).join('\n\n');

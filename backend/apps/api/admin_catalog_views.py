@@ -205,6 +205,8 @@ class AdminSkuDuplicateAPIView(APIView):
             price_type=source.price_type,
             price_notice=source.price_notice,
             note=source.note,
+            warranty=source.warranty,
+            warranty_note=source.warranty_note,
         )
         sku.channel_tags.set(source.channel_tags.all())
         sku = SKU.objects.get(pk=sku.pk)

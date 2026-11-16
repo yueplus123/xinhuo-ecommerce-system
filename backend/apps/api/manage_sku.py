@@ -109,6 +109,8 @@ def _detail(sku, request=None):
         "name": sku.name,
         "status": sku.status,
         "precaution": sku.precaution,
+        "warranty": sku.warranty,
+        "warranty_note": sku.warranty_note,
         "price_type": sku.price_type,
         "price_notice": sku.price_notice,
         "channel_tag_ids": [t.pk for t in sku.channel_tags.all()],
@@ -120,6 +122,9 @@ def _detail(sku, request=None):
     }
 
 
+WARRANTY_PRESETS = ["不质保", "24 小时", "7 天", "30 天", "会员到期前"]
+
+
 def _options():
     return {
         "channel_tags": [
@@ -128,6 +133,8 @@ def _options():
         ],
         "price_types": [{"value": v, "label": l} for v, l in SKU.PRICE_TYPE_CHOICES],
         "statuses": [{"value": v, "label": l} for v, l in SKU.STATUS_CHOICES],
+        # 质保期常用选项（也可以自己填）
+        "warranty_presets": WARRANTY_PRESETS,
         "usd_tiers": [
             {"id": t.pk, "usd_range": t.usd_range, "rate_percent": str(t.rate_percent)}
             for t in UsdProxyPriceTier.objects.all().order_by("sort_order", "id")
@@ -181,6 +188,10 @@ def _save(request, sku):
     sku.name = name[:200]
     sku.status = status_v
     sku.precaution = str(data.get("precaution") or "")
+    if "warranty" in data:
+        sku.warranty = str(data.get("warranty") or "").strip()[:50]
+    if "warranty_note" in data:
+        sku.warranty_note = str(data.get("warranty_note") or "").strip()[:2000]
     sku.price_type = price_type
     sku.price_notice = str(data.get("price_notice") or "")
     sku.price = prices[0]["rmb_amount"] if prices else None  # 旧字段：取第一档

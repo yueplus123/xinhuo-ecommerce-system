@@ -93,3 +93,48 @@ class SkuEditorSaveTests(TestCase):
         self.assertNotIn("tutorials", r.data["options"])
         s.refresh_from_db()
         self.assertEqual(s.name, "美区2")
+
+
+class SkuWarrantyTests(TestCase):
+    """质保条件：管理后台商品编辑里填写，商品库接口返回给职员端显示（所有人一样）。"""
+
+    def setUp(self):
+        U = get_user_model()
+        self.admin = U.objects.create_user("su2", password="x", is_staff=True, is_superuser=True)
+        self.staff = U.objects.create_user("st2", password="x", is_staff=True)
+        p = Platform.objects.create(name="chatgpt")
+        b = Business.objects.create(platform=p, name="GPT号")
+        self.sku = SKU.objects.create(business=b, name="普通号")
+
+    def test_edit_and_show(self):
+        c = APIClient()
+        c.force_authenticate(self.admin)
+        r = c.get(f"/api/manage/sku-editor/{self.sku.id}/")
+        self.assertIn("7 天", r.data["options"]["warranty_presets"])
+        r = c.put(f"/api/manage/sku-editor/{self.sku.id}/",
+                  {"name": "普通号", "status": "on_sale", "price_items": "[]", "channel_tag_ids": "[]",
+                   "warranty": " 7 天 ", "warranty_note": "登录不上包换一次\n自己改密码后不保"}, format="multipart")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["warranty"], "7 天")
+        # 保存时没带质保字段：原来的质保不动
+        r = c.put(f"/api/manage/sku-editor/{self.sku.id}/",
+                  {"name": "普通号2", "status": "on_sale", "price_items": "[]", "channel_tag_ids": "[]"}, format="multipart")
+        self.sku.refresh_from_db()
+        self.assertEqual((self.sku.warranty, self.sku.warranty_note), ("7 天", "登录不上包换一次\n自己改密码后不保"))
+        # 职员端商品库：返回质保
+        s = APIClient()
+        s.force_authenticate(self.staff)
+        lib = s.get("/api/catalog/library/").data
+        sku = lib["platforms"][0]["businesses"][0]["skus"][0]
+        self.assertEqual((sku["warranty"], sku["warranty_note"]), ("7 天", "登录不上包换一次\n自己改密码后不保"))
+        # 复制商品：质保一起复制
+        r = c.post(f"/api/admin/catalog/skus/{self.sku.id}/duplicate/")
+        self.assertEqual(SKU.objects.get(pk=r.data["id"]).warranty, "7 天")
+
+    def test_staff_cannot_edit(self):
+        c = APIClient()
+        c.force_authenticate(self.staff)
+        r = c.put(f"/api/manage/sku-editor/{self.sku.id}/", {"name": "x", "warranty": "30 天"}, format="multipart")
+        self.assertIn(r.status_code, (401, 403))
+        self.sku.refresh_from_db()
+        self.assertEqual(self.sku.warranty, "")

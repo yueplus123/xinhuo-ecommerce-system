@@ -60,6 +60,8 @@ def build_catalog_library():
                     "price_type_label": price_type_labels.get(s.price_type, ""),
                     "price_notice": s.price_notice or "",
                     "precaution": s.precaution or "",
+                    "warranty": s.warranty or "",
+                    "warranty_note": s.warranty_note or "",
                     "note": s.note or "",
                     "extend_config": s.extend_config or "",
                     "price_items": [

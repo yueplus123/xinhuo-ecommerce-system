@@ -85,6 +85,8 @@ export interface SkuEditorOptions {
   price_types: Array<{ value: string; label: string }>
   statuses: Array<{ value: SaleStatus; label: string }>
   usd_tiers: Array<{ id: number; usd_range: string; rate_percent: string }>
+  /** 质保期常用选项 */
+  warranty_presets: string[]
 }
 export interface SkuDetail {
   id: number
@@ -95,6 +97,8 @@ export interface SkuDetail {
   name: string
   status: SaleStatus
   precaution: string
+  warranty: string
+  warranty_note: string
   price_type: string
   price_notice: string
   channel_tag_ids: number[]

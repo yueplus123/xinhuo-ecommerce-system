@@ -93,7 +93,7 @@ def main():
             images[r["sku_id"]].append(media(r["image"]))
 
     sku_cols = cols("catalog_sku")
-    want = ["id", "name", "status", "price", "price_type", "price_notice", "precaution", "note",
+    want = ["id", "name", "status", "price", "price_type", "price_notice", "precaution", "warranty", "warranty_note", "note",
             "image", "extend_config", "business_id"]
     sel = ", ".join(c for c in want if c in sku_cols)
     skus_by_biz = defaultdict(list)
@@ -110,6 +110,8 @@ def main():
             "price_type_label": PRICE_TYPES.get(pt, ""),
             "price_notice": s.get("price_notice") or "",
             "precaution": s.get("precaution") or "",
+            "warranty": s.get("warranty") or "",
+            "warranty_note": s.get("warranty_note") or "",
             "note": s.get("note") or "",
             "extend_config": s.get("extend_config") or "",
             "price_items": prices.get(s["id"], []),

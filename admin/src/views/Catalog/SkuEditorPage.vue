@@ -51,6 +51,8 @@ const form = reactive({
   price_type: '',
   price_notice: '',
   precaution: '',
+  warranty: '',
+  warranty_note: '',
   channel_tag_ids: [] as number[]
 })
 const prices = ref<Array<{ label: string; rmb_amount: number | undefined; notice: string }>>([])
@@ -71,6 +73,8 @@ function fill(d: SkuDetail) {
   form.price_type = d.price_type
   form.price_notice = d.price_notice
   form.precaution = d.precaution
+  form.warranty = d.warranty || ''
+  form.warranty_note = d.warranty_note || ''
   form.channel_tag_ids = [...d.channel_tag_ids]
   prices.value = d.price_items.map((p) => ({ label: p.label, rmb_amount: Number(p.rmb_amount), notice: p.notice }))
   images.value = [...d.images]
@@ -111,6 +115,17 @@ const movePrice = (i: number, d: -1 | 1) => {
 
 // 话术、教程已移到「教程+话术」（管理后台左侧「教程+话术」），这里不再编辑
 
+// 质保说明预览：和职员端同样的判断规则
+const W_NO = /(不(?:另外|再|提供|予|给|做)?(?:质保|保修|保|包换|包补|包|退款|退|负责)|无法质保|概不)/
+const W_OK = /(包换|包补|免费补|补发|补卡|换新|可以找回|找回|退款|保修)/
+const warrantyLines = computed(() =>
+  String(form.warranty_note || '')
+    .split(/[；;\n]+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((text) => ({ text, kind: W_NO.test(text) ? 'no' : W_OK.test(text) ? 'ok' : 'tx' }))
+)
+
 // ---- 截图 ----
 function beforeUpload(file: File) {
   if (!file.type.startsWith('image/')) {
@@ -144,6 +159,8 @@ async function submit() {
   fd.append('price_type', form.price_type)
   fd.append('price_notice', form.price_notice)
   fd.append('precaution', form.precaution)
+  fd.append('warranty', form.warranty || '')
+  fd.append('warranty_note', form.warranty_note || '')
   fd.append('channel_tag_ids', JSON.stringify(form.channel_tag_ids))
   fd.append(
     'price_items',
@@ -185,6 +202,38 @@ async function submit() {
           </ElFormItem>
           <ElFormItem label="注意事项">
             <ElInput v-model="form.precaution" type="textarea" :rows="4" placeholder="职员端 SKU 卡片上显示的注意事项" />
+          </ElFormItem>
+        </ElCard>
+
+        <ElCard shadow="never" header="质保条件" class="mb">
+          <ElFormItem label="质保期">
+            <ElSelect
+              v-model="form.warranty"
+              filterable
+              allow-create
+              default-first-option
+              clearable
+              placeholder="未填写（可以选，也可以直接输入，比如 15 天）"
+              style="width: 320px"
+            >
+              <ElOption v-for="o in options.warranty_presets || []" :key="o" :label="o" :value="o" />
+            </ElSelect>
+          </ElFormItem>
+          <ElFormItem label="质保说明">
+            <ElInput
+              v-model="form.warranty_note"
+              type="textarea"
+              :rows="4"
+              :placeholder="'一条一行（或用；隔开），例如：\n登录不上、被封号包换一次\n自己改密码、改邮箱后出问题不保'"
+            />
+            <div class="muted wty-hint">
+              职员端「业务+价格」详情右上角显示为「质保条件：」。写了「包换 / 补 / 找回」的一行显示 ✓，写了「不保 / 不包 / 不另外质保」的显示 ✕。
+            </div>
+            <ul v-if="warrantyLines.length" class="wty-preview">
+              <li v-for="(l, i) in warrantyLines" :key="i" :class="l.kind">
+                <span class="m">{{ l.kind === 'ok' ? '✓' : l.kind === 'no' ? '✕' : '•' }}</span>{{ l.text }}
+              </li>
+            </ul>
           </ElFormItem>
         </ElCard>
 
@@ -304,5 +353,34 @@ async function submit() {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
+}
+.wty-hint {
+  font-size: 12px;
+  line-height: 1.6;
+  margin-top: 6px;
+}
+.wty-preview {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.wty-preview .m {
+  display: inline-block;
+  width: 18px;
+  font-weight: 800;
+}
+.wty-preview .ok .m {
+  color: #15803d;
+}
+.wty-preview .no .m {
+  color: #c24141;
+}
+.wty-preview .tx .m {
+  color: var(--el-text-color-secondary);
 }
 </style>
