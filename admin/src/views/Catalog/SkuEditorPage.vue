@@ -105,6 +105,24 @@ const backToWorkbench = () =>
   router.push(ctx.platform ? `/platforms/${ctx.platform}` : '/platforms')
 
 // ---- 价格档 ----
+// 不同价格类型的填写方式（与旧版后台一致）：single 只填一档；multi 可多档；none 不填价格档
+type PriceMode = 'none' | 'single' | 'multi'
+const PRICE_UI: Record<string, { hint: string; mode: PriceMode; label: string; amount: string; showLabel: boolean }> = {
+  '': { hint: '请先选择价格类型，下面会显示对应的填写方式。', mode: 'none', label: '档位名称', amount: '人民币（元）', showLabel: true },
+  cny_single: { hint: '单一人民币：只填一个人民币金额，不需要档位名称。', mode: 'single', label: '档位名称', amount: '人民币（元）', showLabel: false },
+  usd_single: { hint: '美金（单一）：填一档。左边写美金金额（如 9.99），右边写折算人民币。', mode: 'single', label: '美金（USD）', amount: '折算人民币（元）', showLabel: true },
+  usd_tier: { hint: '美金（多档）：每行一档。左边写美金档位，右边写对应人民币，可以加多行。', mode: 'multi', label: '美金档位', amount: '折算人民币（元）', showLabel: true },
+  package: { hint: '套餐：每行一个套餐。左边写套餐名称，右边写人民币价格，可以加多行。', mode: 'multi', label: '套餐名称', amount: '人民币（元）', showLabel: true },
+  jpy_recharge: { hint: '日元充值：每行一档。左边写日元数量（如 1000），右边写人民币，可以加多行。', mode: 'multi', label: '日元档位', amount: '人民币（元）', showLabel: true },
+  usd_proxy: { hint: '按美金代付收费：费率用资源池「美金代付价格池」，这里不用填价格档。', mode: 'none', label: '档位名称', amount: '人民币（元）', showLabel: false }
+}
+const priceUi = computed(() => PRICE_UI[form.price_type || ''] || PRICE_UI[''])
+// 切换类型时不删已有价格档：不该有的档位会标出来，由你决定删不删
+const priceRowExtra = (i: number) =>
+  priceUi.value.mode === 'none' || (priceUi.value.mode === 'single' && i > 0)
+const canAddPrice = computed(
+  () => priceUi.value.mode === 'multi' || (priceUi.value.mode === 'single' && prices.value.length === 0)
+)
 const addPrice = () => prices.value.push({ label: '', rmb_amount: undefined, notice: '' })
 const removePrice = (i: number) => prices.value.splice(i, 1)
 const movePrice = (i: number, d: -1 | 1) => {
@@ -251,16 +269,33 @@ async function submit() {
           </ElFormItem>
           <ElFormItem label="价格档">
             <div class="rows">
-              <div v-for="(p, i) in prices" :key="i" class="price-row">
-                <ElInput v-model="p.label" placeholder="档位名称（可选）" style="width: 160px" maxlength="100" />
-                <ElInputNumber v-model="p.rmb_amount" :min="0" :precision="2" :step="1" placeholder="人民币" controls-position="right" style="width: 150px" />
+              <div class="price-hint">{{ priceUi.hint }}</div>
+              <div v-if="prices.length" class="price-row price-head">
+                <span v-if="priceUi.showLabel" style="width: 160px">{{ priceUi.label }}</span>
+                <span style="width: 150px">{{ priceUi.amount }}</span>
+                <span style="flex: 1; min-width: 160px">单条注意事项</span>
+              </div>
+              <div v-for="(p, i) in prices" :key="i" class="price-row" :class="{ extra: priceRowExtra(i) }">
+                <ElInput
+                  v-if="priceUi.showLabel || p.label"
+                  v-model="p.label"
+                  :placeholder="priceUi.label + '（可选）'"
+                  style="width: 160px"
+                  maxlength="100"
+                />
+                <ElInputNumber v-model="p.rmb_amount" :min="0" :precision="2" :step="1" :placeholder="priceUi.amount" controls-position="right" style="width: 150px" />
                 <ElInput v-model="p.notice" placeholder="单条注意事项（可选）" style="flex: 1; min-width: 160px" />
                 <ElButton link :disabled="i === 0" @click="movePrice(i, -1)">↑</ElButton>
                 <ElButton link :disabled="i === prices.length - 1" @click="movePrice(i, 1)">↓</ElButton>
                 <ElButton link type="danger" @click="removePrice(i)">删除</ElButton>
+                <span v-if="priceRowExtra(i)" class="extra-tip">
+                  {{ priceUi.mode === 'none' ? '这个类型不用价格档，可以删除' : '单一价格只用第一档，这档可以删除' }}
+                </span>
               </div>
-              <ElButton size="small" @click="addPrice">+ 添加价格档</ElButton>
-              <span class="muted ml">第一档会同步为 SKU 的「默认价格」</span>
+              <template v-if="canAddPrice">
+                <ElButton size="small" @click="addPrice">+ {{ priceUi.mode === 'single' ? '填写价格' : '添加' + priceUi.label }}</ElButton>
+                <span class="muted ml">第一档会同步为 SKU 的「默认价格」</span>
+              </template>
             </div>
           </ElFormItem>
         </ElCard>
@@ -315,6 +350,26 @@ async function submit() {
 .muted {
   color: var(--el-text-color-secondary);
   font-size: 13px;
+}
+.price-hint {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--el-color-primary-dark-2);
+  background: var(--el-color-primary-light-9);
+  border-radius: 6px;
+}
+.price-head {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.price-row.extra :deep(.el-input__wrapper),
+.price-row.extra :deep(.el-input-number) {
+  opacity: 0.55;
+}
+.extra-tip {
+  font-size: 12px;
+  color: var(--el-color-warning-dark-2);
 }
 .rows {
   width: 100%;
