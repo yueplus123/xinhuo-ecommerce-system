@@ -1220,3 +1220,35 @@ class CardFxSettings(models.Model):
 
     def __str__(self) -> str:
         return f"系数 {self.factor}"
+
+
+class CardManagerScope(models.Model):
+    """薪火卡管家（汇通卡 Chrome 插件）：每个职员能看哪些备注的卡。
+
+    keywords 一行一个关键词；卡片备注里包含其中任意一个，这个职员就能在插件里看到这张卡。
+    超级管理员 / 老板 / CEO 不受限制，能看全部。只能在管理后台「卡管家权限」页修改。
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="card_manager_scope",
+        verbose_name="职员",
+    )
+    keywords = models.TextField(blank=True, default="", verbose_name="可看的备注关键词（一行一个）")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="最后修改人",
+    )
+
+    class Meta:
+        verbose_name = "卡管家权限"
+        verbose_name_plural = "卡管家权限"
+
+    def __str__(self) -> str:
+        return f"{self.user} 卡管家权限"
