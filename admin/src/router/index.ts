@@ -35,7 +35,8 @@ const routes: RouteRecordRaw[] = [
       // 账号与数据
       page('职员账号', 'users', () => import('@/views/Accounts/UsersPage.vue')),
       page('收款记录管理', 'payment-records', () => import('@/views/Accounts/PaymentRecordsPage.vue')),
-      page('订阅提醒管理', 'subscription-reminders', () => import('@/views/Accounts/SubscriptionRemindersPage.vue'))
+      page('订阅提醒管理', 'subscription-reminders', () => import('@/views/Accounts/SubscriptionRemindersPage.vue')),
+      page('卡管家权限', 'card-scope', () => import('@/views/Accounts/CardScopePage.vue'))
     ]
   },
   { path: '/:pathMatch(.*)*', redirect: '/' }

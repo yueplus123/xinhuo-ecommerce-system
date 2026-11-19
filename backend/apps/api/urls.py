@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import admin_catalog_views, card_fx_views, catalog_library, duty_views, knowledge_views, ledger_views, manage_accounts, manage_catalog, manage_content, manage_pools, manage_sku, views
+from . import admin_catalog_views, card_fx_views, card_manager_views, catalog_library, duty_views, knowledge_views, ledger_views, manage_accounts, manage_catalog, manage_content, manage_pools, manage_sku, views
 
 app_name = "api"
 
@@ -126,6 +126,13 @@ urlpatterns = [
     path("service-monitor-pages/", views.ServiceMonitorPageListAPIView.as_view(), name="service-monitor-pages"),
     path("card-fx/", card_fx_views.CardFxAPIView.as_view(), name="card-fx"),
     path("card-fx/settings/", card_fx_views.CardFxSettingsAPIView.as_view(), name="card-fx-settings"),
+    path("card-manager/me/", card_manager_views.CardManagerMeAPIView.as_view(), name="card-manager-me"),
+    path("card-manager/scopes/", card_manager_views.CardManagerScopeListAPIView.as_view(), name="card-manager-scopes"),
+    path(
+        "card-manager/scopes/<int:user_id>/",
+        card_manager_views.CardManagerScopeDetailAPIView.as_view(),
+        name="card-manager-scope",
+    ),
     path("knowledge/", knowledge_views.KnowledgeListAPIView.as_view(), name="knowledge-list"),
     path("knowledge/<int:pk>/", knowledge_views.KnowledgeDetailAPIView.as_view(), name="knowledge-detail"),
     path("duty/state/", duty_views.DutyStateAPIView.as_view(), name="duty-state"),
