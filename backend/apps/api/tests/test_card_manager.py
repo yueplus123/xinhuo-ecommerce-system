@@ -66,3 +66,56 @@ class ApiTests(TestCase):
     def test_put_unknown_or_guest(self):
         self.assertEqual(self.as_(self.su).put("/api/card-manager/scopes/99999/", {"keywords": []}, format="json").status_code, 404)
         self.assertEqual(self.as_(self.su).put(f"/api/card-manager/scopes/{self.guest.pk}/", {"keywords": []}, format="json").status_code, 404)
+
+
+class RiskHandledTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.boss = User.objects.create_user("boss", password="p", is_staff=True)
+        self.boss.groups.add(ensure_boss_group())
+        self.a = User.objects.create_user("staffA", password="p", is_staff=True)
+        self.b = User.objects.create_user("staffB", password="p", is_staff=True)
+        self.none = User.objects.create_user("noscope", password="p", is_staff=True)
+        card_manager.set_keywords(self.a, ["冬"], self.boss)
+        card_manager.set_keywords(self.b, ["苏橘"], self.boss)
+        self.c = APIClient()
+
+    def as_(self, u):
+        self.c.force_authenticate(u)
+        return self.c
+
+    def item(self, **kw):
+        d = {"card_id": "C1", "risk": "cvv", "mark": "2026-11-21 10:00:00", "result": "ok", "card_suffix": "1234", "card_remark": "冬卡7"}
+        d.update(kw)
+        return d
+
+    def test_mark_list_and_scope(self):
+        r = self.as_(self.a).post("/api/card-manager/risk-handled/", {"items": [self.item()]}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["results"][0]["handled_by"], "staffA")
+        # 自己、老板能看到；别的员工看不到
+        self.assertEqual(len(self.as_(self.a).get("/api/card-manager/risk-handled/").data["results"]), 1)
+        self.assertEqual(len(self.as_(self.boss).get("/api/card-manager/risk-handled/").data["results"]), 1)
+        self.assertEqual(len(self.as_(self.b).get("/api/card-manager/risk-handled/").data["results"]), 0)
+
+    def test_same_card_risk_keeps_latest(self):
+        self.as_(self.a).post("/api/card-manager/risk-handled/", {"items": [self.item()]}, format="json")
+        self.as_(self.boss).post("/api/card-manager/risk-handled/", {"items": [self.item(mark="2026-11-22 09:00:00", result="locked")]}, format="json")
+        rows = self.as_(self.boss).get("/api/card-manager/risk-handled/").data["results"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0]["mark"], rows[0]["result"], rows[0]["handled_by"]), ("2026-11-22 09:00:00", "locked", "boss"))
+
+    def test_staff_cannot_mark_others_card(self):
+        r = self.as_(self.b).post("/api/card-manager/risk-handled/", {"items": [self.item()]}, format="json")
+        self.assertEqual(r.status_code, 403)
+
+    def test_bad_input(self):
+        self.assertEqual(self.as_(self.a).post("/api/card-manager/risk-handled/", {"items": [self.item(risk="xx")]}, format="json").status_code, 400)
+        self.assertEqual(self.as_(self.a).post("/api/card-manager/risk-handled/", {"items": []}, format="json").status_code, 400)
+        self.assertEqual(self.as_(self.none).get("/api/card-manager/risk-handled/").status_code, 403)
+
+    def test_undo(self):
+        self.as_(self.a).post("/api/card-manager/risk-handled/", {"items": [self.item()]}, format="json")
+        self.assertEqual(self.as_(self.b).post("/api/card-manager/risk-handled/undo/", {"card_id": "C1", "risk": "cvv"}, format="json").status_code, 403)
+        self.assertEqual(self.as_(self.a).post("/api/card-manager/risk-handled/undo/", {"card_id": "C1", "risk": "cvv"}, format="json").status_code, 200)
+        self.assertEqual(self.as_(self.a).post("/api/card-manager/risk-handled/undo/", {"card_id": "C1", "risk": "cvv"}, format="json").status_code, 404)
