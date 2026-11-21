@@ -51,6 +51,17 @@ class ApiTests(TestCase):
         self.assertEqual(names["staffA"], ["冬"])
         self.assertNotIn("guest", names)
 
+    def test_admin_keywords_for_claiming(self):
+        # 老板也能填关键词（认领用）：照样能看全部，staff 列表里带上自己的关键词
+        r = self.as_(self.su).put(f"/api/card-manager/scopes/{self.boss.pk}/", {"keywords": ["hazen"]}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["keywords"], ["hazen"])
+        r = self.as_(self.boss).get("/api/card-manager/me/")
+        self.assertTrue(r.data["is_admin"])
+        self.assertEqual(r.data["keywords"], ["hazen"])
+        names = {x["username"]: x["keywords"] for x in r.data["staff"]}
+        self.assertEqual(names[self.boss.username], ["hazen"])
+
     def test_guest_forbidden(self):
         self.assertEqual(self.as_(self.guest).get("/api/card-manager/me/").status_code, 403)
 
