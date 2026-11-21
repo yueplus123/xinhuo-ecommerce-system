@@ -224,7 +224,7 @@ def _card_info(raw) -> dict:
         raise ValueError("卡ID不对")
     return {
         "card_id": card_id,
-        "card_bin": str(raw.get("card_bin") or "")[:8],
+        "card_bin": str(raw.get("card_bin") or "")[:6],
         "card_suffix": str(raw.get("card_suffix") or "")[:8],
         "card_remark": str(raw.get("card_remark") or "")[:255],
     }
