@@ -127,6 +127,12 @@ urlpatterns = [
     path("card-fx/", card_fx_views.CardFxAPIView.as_view(), name="card-fx"),
     path("card-fx/settings/", card_fx_views.CardFxSettingsAPIView.as_view(), name="card-fx-settings"),
     path("card-manager/me/", card_manager_views.CardManagerMeAPIView.as_view(), name="card-manager-me"),
+    path("card-manager/risk-handled/", card_manager_views.CardRiskHandledAPIView.as_view(), name="card-manager-risk-handled"),
+    path(
+        "card-manager/risk-handled/undo/",
+        card_manager_views.CardRiskHandledUndoAPIView.as_view(),
+        name="card-manager-risk-handled-undo",
+    ),
     path("card-manager/scopes/", card_manager_views.CardManagerScopeListAPIView.as_view(), name="card-manager-scopes"),
     path(
         "card-manager/scopes/<int:user_id>/",

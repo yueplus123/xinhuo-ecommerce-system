@@ -1252,3 +1252,40 @@ class CardManagerScope(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user} 卡管家权限"
+
+
+class CardRiskHandled(models.Model):
+    """薪火卡管家：某张汇通卡的某种风险「已处理」的记录（跟着薪火官网账号走，换电脑也在）。
+
+    mark 是处理那一刻的「触发点」：交易类风险记最后一笔触发交易的时间，标记类风险（静默卡等）记汇通的标记值。
+    插件重新加载时，如果这张卡又有了比 mark 更新的触发交易，这条风险就重新回到「待处理」。
+    card_remark 是处理时卡的备注，用来判断员工有没有权限看到 / 撤销这条记录。
+    """
+
+    RESULT_CHOICES = [("ok", "没问题"), ("locked", "已锁卡"), ("cancelled", "已销卡"), ("other", "其他")]
+
+    card_id = models.CharField(max_length=64, verbose_name="汇通卡ID")
+    risk = models.CharField(max_length=20, verbose_name="风险类型")
+    mark = models.CharField(max_length=64, blank=True, default="", verbose_name="处理时的触发点")
+    result = models.CharField(max_length=20, choices=RESULT_CHOICES, default="ok", verbose_name="处理结果")
+    note = models.CharField(max_length=200, blank=True, default="", verbose_name="备注")
+    card_suffix = models.CharField(max_length=8, blank=True, default="", verbose_name="卡号后4位")
+    card_remark = models.CharField(max_length=255, blank=True, default="", verbose_name="卡片备注")
+    handled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="处理人",
+    )
+    handled_at = models.DateTimeField(auto_now=True, verbose_name="处理时间")
+
+    class Meta:
+        verbose_name = "卡管家风险处理记录"
+        verbose_name_plural = "卡管家风险处理记录"
+        constraints = [models.UniqueConstraint(fields=["card_id", "risk"], name="uniq_card_risk_handled")]
+        indexes = [models.Index(fields=["handled_at"], name="card_risk_handled_at")]
+
+    def __str__(self) -> str:
+        return f"{self.card_id} {self.risk} {self.result}"
