@@ -6,6 +6,10 @@ PUT  /api/card-manager/scopes/<user_id>/    保存某个职员的关键词 {"key
 GET  /api/card-manager/risk-handled/         插件：最近 180 天的风险「已处理」记录（员工只看到自己关键词的卡）
 POST /api/card-manager/risk-handled/         插件：记成已处理 {"items": [{"card_id", "risk", "mark", "result", "note", "card_suffix", "card_remark"}]}
 POST /api/card-manager/risk-handled/undo/    插件：撤销已处理 {"card_id": "...", "risk": "cvv"}
+POST /api/card-manager/otp-link/             插件：读取 / 生成 / 重新生成接码链接 {"card_id", "card_bin", "card_suffix", "card_remark", "action": "get|create|renew|revoke"}
+POST /api/card-manager/otp-codes/            推送电脑上的插件上传验证码 {"items": [{"card_id", "payment_no", "code", "trans_time"}]}（仅管理员）
+GET  /api/otp/<token>/                       公开：客户接码页（网页）
+GET  /api/otp/<token>/json/                  公开：这张卡最近 15 分钟的验证码（按 IP 限流）
 
 插件用的是职员端同一套账号：POST /api/auth/token/ 拿 access/refresh。
 """
@@ -14,7 +18,9 @@ from __future__ import annotations
 
 from django.contrib.auth import get_user_model
 from rest_framework import permissions
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from backend.apps.catalog import card_manager
@@ -94,3 +100,69 @@ class CardRiskHandledUndoAPIView(APIView):
         if not ok:
             return Response({"detail": "没有这条处理记录"}, status=404)
         return Response({"ok": True})
+
+
+class CardOtpLinkAPIView(APIView):
+    permission_classes = [StaffOnlyPermission]
+
+    def post(self, request):
+        if _no_scope(request.user):
+            return Response({"detail": "管理员还没给你分配可看的卡"}, status=403)
+        d = request.data or {}
+        action = str(d.get("action") or "get")
+        try:
+            if action == "revoke":
+                return Response({"ok": card_manager.revoke_link(request.user, d), "link": None})
+            if action not in ("get", "create", "renew"):
+                return Response({"detail": "不认识的操作"}, status=400)
+            link = card_manager.get_link(request.user, d, create=action == "create", renew=action == "renew")
+        except PermissionError as e:
+            return Response({"detail": str(e)}, status=403)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=400)
+        return Response({"link": link})
+
+
+class CardOtpCodesAPIView(APIView):
+    permission_classes = [StaffOnlyPermission]
+
+    def post(self, request):
+        try:
+            n = card_manager.upload_codes(request.user, (request.data or {}).get("items"))
+        except PermissionError as e:
+            return Response({"detail": str(e)}, status=403)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=400)
+        return Response({"created": n})
+
+
+class PublicOtpJsonAPIView(APIView):
+    """客户接码页的数据：不需要登录，凭链接里的 token；按 IP 限流。"""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "otp"
+
+    def get(self, request, token):
+        data = card_manager.public_codes(token)
+        if data is None:
+            return Response({"detail": "链接已失效"}, status=404)
+        resp = Response(data)
+        resp["Cache-Control"] = "no-store"
+        resp["X-Robots-Tag"] = "noindex, nofollow"
+        return resp
+
+
+def public_otp_page(request, token):
+    """客户接码页（静态网页，数据由页面自己去 json/ 取）。"""
+    from pathlib import Path
+
+    from django.http import HttpResponse
+
+    html = (Path(__file__).resolve().parent / "static_pages" / "otp.html").read_text(encoding="utf-8")
+    resp = HttpResponse(html, content_type="text/html; charset=utf-8")
+    resp["Cache-Control"] = "no-store"
+    resp["X-Robots-Tag"] = "noindex, nofollow"
+    resp["Referrer-Policy"] = "no-referrer"
+    return resp

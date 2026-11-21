@@ -118,7 +118,7 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ),
     # 登录/刷新令牌接口按 IP 限流，防暴力破解（视图上用 throttle_scope="auth"）
-    "DEFAULT_THROTTLE_RATES": {"auth": "20/min"},
+    "DEFAULT_THROTTLE_RATES": {"auth": "20/min", "otp": "40/min"},  # otp：客户接码页（公开）
 }
 
 CORS_ALLOWED_ORIGINS = [
