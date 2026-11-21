@@ -91,7 +91,8 @@ def me_payload(user) -> dict:
 
 
 # ---------------- 风险卡「已处理」记录 ----------------
-RISK_KEYS = {"of", "cvv", "nosup", "nobal", "silent", "near", "expired"}
+# 风险卡 7 种 + pay（消费明细的失败交易，card_id 存交易号）+ notify（月末通知充值）+ keep（月末保留不销）
+RISK_KEYS = {"of", "cvv", "nosup", "nobal", "silent", "near", "expired", "pay", "notify", "keep"}
 RESULTS = {k for k, _ in CardRiskHandled.RESULT_CHOICES}
 HANDLED_KEEP_DAYS = 180  # 插件只取最近 180 天的处理记录
 MAX_BATCH = 500

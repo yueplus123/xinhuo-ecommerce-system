@@ -116,6 +116,17 @@ class RiskHandledTests(TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual((rows[0]["mark"], rows[0]["result"], rows[0]["handled_by"]), ("2026-11-22 09:00:00", "locked", "boss"))
 
+    def test_pay_notify_keep_kinds(self):
+        # 消费明细失败交易（card_id 存交易号）、月末通知、月末保留不销
+        items = [
+            self.item(card_id="01a1f27b-d8b2-77f8-bc2d-1c4cf5c2c153", risk="pay", mark=""),
+            self.item(card_id="C1", risk="notify", mark="2026-11"),
+            self.item(card_id="C1", risk="keep", mark="2026-11"),
+        ]
+        r = self.as_(self.a).post("/api/card-manager/risk-handled/", {"items": items}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(sorted(x["risk"] for x in self.as_(self.a).get("/api/card-manager/risk-handled/").data["results"]), ["keep", "notify", "pay"])
+
     def test_staff_cannot_mark_others_card(self):
         r = self.as_(self.b).post("/api/card-manager/risk-handled/", {"items": [self.item()]}, format="json")
         self.assertEqual(r.status_code, 403)
