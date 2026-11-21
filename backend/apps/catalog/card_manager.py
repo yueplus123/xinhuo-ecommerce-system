@@ -12,7 +12,7 @@ import re
 
 from django.contrib.auth import get_user_model
 
-from .models import CardManagerScope, CardRiskHandled
+from .models import CardManagerScope, CardOtpCode, CardOtpLink, CardRiskHandled
 from .roles import is_boss, is_ceo, is_guest
 
 MAX_KEYWORDS = 50
@@ -182,3 +182,133 @@ def undo_handled(user, card_id, risk) -> bool:
         raise PermissionError("没有权限撤销这条记录")
     h.delete()
     return True
+
+
+# ---------------- 接码链接：客户凭链接看某张卡最近的验证码 ----------------
+OTP_KEEP_DAYS = 3  # 验证码只留 3 天
+OTP_SHOW_MINUTES = 15  # 接码页只显示最近 15 分钟的验证码
+OTP_MAX_UPLOAD = 300
+
+
+def _cst_to_aware(s: str):
+    """汇通交易时间是北京时间的「YYYY-MM-DD HH:MM:SS」。"""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    dt = datetime.strptime(str(s or "")[:19], "%Y-%m-%d %H:%M:%S")
+    return dt.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+
+
+def link_row(link: CardOtpLink | None) -> dict | None:
+    if not link:
+        return None
+    return {
+        "card_id": link.card_id,
+        "token": link.token,
+        "created_by": link.created_by.username if link.created_by else "",
+        "created_at": link.created_at.isoformat(),
+        "view_count": link.view_count,
+        "last_view_at": link.last_view_at.isoformat() if link.last_view_at else None,
+    }
+
+
+def active_link(card_id: str) -> CardOtpLink | None:
+    return CardOtpLink.objects.filter(card_id=card_id, revoked_at__isnull=True).select_related("created_by").first()
+
+
+def _card_info(raw) -> dict:
+    if not isinstance(raw, dict):
+        raise ValueError("数据格式不对")
+    card_id = str(raw.get("card_id") or "").strip()
+    if not card_id or len(card_id) > 64:
+        raise ValueError("卡ID不对")
+    return {
+        "card_id": card_id,
+        "card_bin": str(raw.get("card_bin") or "")[:6],
+        "card_suffix": str(raw.get("card_suffix") or "")[:8],
+        "card_remark": str(raw.get("card_remark") or "")[:255],
+    }
+
+
+def get_link(user, raw, create: bool = False, renew: bool = False) -> dict | None:
+    """读取 / 生成 / 作废并重新生成某张卡的接码链接。"""
+    import secrets
+
+    from django.utils import timezone
+
+    info = _card_info(raw)
+    if not can_see_remark(user, info["card_remark"]):
+        raise PermissionError("没有权限操作这张卡")
+    link = active_link(info["card_id"])
+    if link and renew:
+        link.revoked_at = timezone.now()
+        link.save(update_fields=["revoked_at"])
+        link = None
+    if not link and (create or renew):
+        link = CardOtpLink.objects.create(**info, token=secrets.token_urlsafe(18), created_by=user)
+    return link_row(link)
+
+
+def revoke_link(user, raw) -> bool:
+    from django.utils import timezone
+
+    info = _card_info(raw)
+    link = active_link(info["card_id"])
+    if not link:
+        return False
+    if not can_see_remark(user, link.card_remark or info["card_remark"]):
+        raise PermissionError("没有权限操作这张卡")
+    link.revoked_at = timezone.now()
+    link.save(update_fields=["revoked_at"])
+    return True
+
+
+def upload_codes(user, items) -> int:
+    """推送电脑上的插件把读到的验证码传上来（只有管理员账号能传）。"""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    if not is_card_admin(user):
+        raise PermissionError("只有管理员账号能上传验证码")
+    if not isinstance(items, list):
+        raise ValueError("数据格式不对")
+    if len(items) > OTP_MAX_UPLOAD:
+        raise ValueError(f"一次最多 {OTP_MAX_UPLOAD} 条")
+    n = 0
+    for raw in items:
+        if not isinstance(raw, dict):
+            continue
+        card_id, pno, code = str(raw.get("card_id") or "")[:64], str(raw.get("payment_no") or "")[:64], str(raw.get("code") or "")
+        if not card_id or not pno or not code.isdigit() or not (4 <= len(code) <= 8):
+            continue
+        try:
+            trans_at = _cst_to_aware(raw.get("trans_time"))
+        except ValueError:
+            continue
+        _, created = CardOtpCode.objects.get_or_create(payment_no=pno, defaults={"card_id": card_id, "code": code, "trans_at": trans_at})
+        n += int(created)
+    CardOtpCode.objects.filter(trans_at__lt=timezone.now() - timedelta(days=OTP_KEEP_DAYS)).delete()
+    return n
+
+
+def public_codes(token: str) -> dict | None:
+    """客户接码页：凭 token 看这张卡最近 15 分钟的验证码。不返回备注等内部信息。"""
+    from datetime import timedelta
+
+    from django.db.models import F
+    from django.utils import timezone
+
+    link = CardOtpLink.objects.filter(token=str(token or ""), revoked_at__isnull=True).first()
+    if not link:
+        return None
+    now = timezone.now()
+    CardOtpLink.objects.filter(pk=link.pk).update(view_count=F("view_count") + 1, last_view_at=now)
+    since = now - timedelta(minutes=OTP_SHOW_MINUTES)
+    qs = CardOtpCode.objects.filter(card_id=link.card_id, trans_at__gte=since).order_by("-trans_at")[:10]
+    return {
+        "card": f"{link.card_bin or '****'}****{link.card_suffix}",
+        "minutes": OTP_SHOW_MINUTES,
+        "now": now.isoformat(),
+        "codes": [{"code": c.code, "time": c.trans_at.isoformat()} for c in qs],
+    }

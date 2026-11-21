@@ -1289,3 +1289,44 @@ class CardRiskHandled(models.Model):
 
     def __str__(self) -> str:
         return f"{self.card_id} {self.risk} {self.result}"
+
+
+class CardOtpLink(models.Model):
+    """薪火卡管家：某张汇通卡的「接码链接」。客户拿着链接（里面是随机 token）就能看到这张卡最近的验证码。
+
+    一张卡同一时间只有一个有效链接；作废后再生成会换一个新 token，旧链接立刻失效。
+    """
+
+    card_id = models.CharField(max_length=64, db_index=True, verbose_name="汇通卡ID")
+    token = models.CharField(max_length=48, unique=True, verbose_name="链接密钥")
+    card_bin = models.CharField(max_length=8, blank=True, default="", verbose_name="卡号前6位")
+    card_suffix = models.CharField(max_length=8, blank=True, default="", verbose_name="卡号后4位")
+    card_remark = models.CharField(max_length=255, blank=True, default="", verbose_name="卡片备注")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+", verbose_name="生成人"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="生成时间")
+    revoked_at = models.DateTimeField(null=True, blank=True, verbose_name="作废时间")
+    view_count = models.PositiveIntegerField(default=0, verbose_name="打开次数")
+    last_view_at = models.DateTimeField(null=True, blank=True, verbose_name="最后打开时间")
+
+    class Meta:
+        verbose_name = "卡管家接码链接"
+        verbose_name_plural = "卡管家接码链接"
+
+    def __str__(self) -> str:
+        return f"{self.card_id} ****{self.card_suffix}"
+
+
+class CardOtpCode(models.Model):
+    """薪火卡管家：插件从汇通交易记录里读到的 passcode 验证码（只留 3 天）。"""
+
+    card_id = models.CharField(max_length=64, db_index=True, verbose_name="汇通卡ID")
+    payment_no = models.CharField(max_length=64, unique=True, verbose_name="汇通交易号")
+    code = models.CharField(max_length=12, verbose_name="验证码")
+    trans_at = models.DateTimeField(db_index=True, verbose_name="交易时间")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="上传时间")
+
+    class Meta:
+        verbose_name = "卡管家验证码"
+        verbose_name_plural = "卡管家验证码"

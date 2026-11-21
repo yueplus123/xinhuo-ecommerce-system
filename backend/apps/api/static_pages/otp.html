@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>卡片验证码</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f6fb;font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:#1f2937}
+.wrap{max-width:440px;margin:0 auto;padding:28px 16px 40px}
+.card{background:linear-gradient(135deg,#4f7cff,#6a5cff);color:#fff;border-radius:16px;padding:18px 20px;box-shadow:0 10px 30px rgba(79,124,255,.3)}
+.card .t{opacity:.85;font-size:13px}.card .no{font:600 20px/1.4 ui-monospace,Menlo,monospace;letter-spacing:2px;margin-top:6px}
+.box{background:#fff;border-radius:16px;margin-top:16px;padding:6px 0;box-shadow:0 2px 10px rgba(15,23,42,.05)}
+.row{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #eef1f6}.row:last-child{border-bottom:0}
+.code{font:700 30px/1 ui-monospace,Menlo,monospace;letter-spacing:5px;flex:1}.row.old .code{color:#9aa4b2;font-size:22px}
+.tm{color:#6b7280;font-size:13px;text-align:right}.new{display:inline-block;background:#e8f7ee;color:#16a34a;border-radius:6px;padding:0 6px;font-size:12px;margin-bottom:2px}
+button{border:0;background:#4f7cff;color:#fff;border-radius:10px;padding:8px 14px;font-size:14px;cursor:pointer}.row.old button{background:#eef1f6;color:#475569}
+.empty{padding:28px 18px;text-align:center;color:#6b7280}.tip{color:#6b7280;font-size:13px;margin-top:14px;text-align:center}
+.err{background:#fff;border-radius:16px;padding:30px 20px;text-align:center;color:#b91c1c;margin-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card"><div class="t">卡片验证码</div><div class="no" id="no">····</div></div>
+  <div id="main"><div class="box"><div class="empty">正在读取…</div></div></div>
+  <div class="tip" id="tip">页面每 5 秒自动刷新。付款需要验证时，验证码一般 30 秒～1 分钟内出现在这里。</div>
+</div>
+<script>
+(function () {
+  var token = location.pathname.split('/').filter(Boolean).pop();
+  var api = location.pathname.replace(/\/?$/, '/') + 'json/';
+  var main = document.getElementById('main');
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function ago(t) { var m = Math.floor((Date.now() - new Date(t).getTime()) / 60000); return m < 1 ? '刚刚' : m + ' 分钟前'; }
+  function hm(t) { var d = new Date(t); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2); }
+  function copy(code, btn) {
+    var done = function () { btn.textContent = '已复制'; setTimeout(function () { btn.textContent = '复制'; }, 1500); };
+    if (navigator.clipboard) navigator.clipboard.writeText(code).then(done, function () { prompt('复制验证码', code); });
+    else prompt('复制验证码', code);
+  }
+  var stop = false;
+  function load() {
+    if (stop || !token) return;
+    fetch(api, { cache: 'no-store' }).then(function (r) {
+      if (r.status === 404) { stop = true; throw new Error('这个链接已失效，请联系卖家重新获取。'); }
+      if (r.status === 429) throw new Error('刷新太频繁，请稍等一会儿。');
+      if (!r.ok) throw new Error('读取失败，请稍后再试。');
+      return r.json();
+    }).then(function (d) {
+      document.getElementById('no').textContent = d.card;
+      if (!d.codes.length) { main.innerHTML = '<div class="box"><div class="empty">最近 ' + d.minutes + ' 分钟还没有验证码<br>请先在付款页面发起验证，再回来看</div></div>'; return; }
+      main.innerHTML = '<div class="box">' + d.codes.map(function (c, i) {
+        return '<div class="row ' + (i ? 'old' : '') + '"><div class="code">' + esc(c.code) + '</div><div class="tm">' + (i ? '' : '<span class="new">最新</span><br>') + hm(c.time) + '<br>' + ago(c.time) + '</div><button data-c="' + esc(c.code) + '">复制</button></div>';
+      }).join('') + '</div>';
+      Array.prototype.forEach.call(main.querySelectorAll('button'), function (b) { b.onclick = function () { copy(b.getAttribute('data-c'), b); }; });
+    }).catch(function (e) {
+      main.innerHTML = '<div class="err">' + esc(e.message) + '</div>';
+      if (stop) document.getElementById('tip').style.display = 'none';
+    });
+  }
+  load(); setInterval(load, 5000);
+})();
+</script>
+</body>
+</html>

@@ -130,3 +130,69 @@ class RiskHandledTests(TestCase):
         self.assertEqual(self.as_(self.b).post("/api/card-manager/risk-handled/undo/", {"card_id": "C1", "risk": "cvv"}, format="json").status_code, 403)
         self.assertEqual(self.as_(self.a).post("/api/card-manager/risk-handled/undo/", {"card_id": "C1", "risk": "cvv"}, format="json").status_code, 200)
         self.assertEqual(self.as_(self.a).post("/api/card-manager/risk-handled/undo/", {"card_id": "C1", "risk": "cvv"}, format="json").status_code, 404)
+
+
+class OtpLinkTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()  # 清掉限流计数
+        User = get_user_model()
+        self.boss = User.objects.create_user("boss2", password="p", is_staff=True)
+        self.boss.groups.add(ensure_boss_group())
+        self.a = User.objects.create_user("otpA", password="p", is_staff=True)
+        self.b = User.objects.create_user("otpB", password="p", is_staff=True)
+        card_manager.set_keywords(self.a, ["冬"], self.boss)
+        card_manager.set_keywords(self.b, ["苏橘"], self.boss)
+        self.c = APIClient()
+        self.card = {"card_id": "C9", "card_bin": "493724", "card_suffix": "6234", "card_remark": "冬卡7"}
+
+    def as_(self, u):
+        self.c.force_authenticate(u)
+        return self.c
+
+    def now_cst(self, minutes_ago=0):
+        from datetime import timedelta
+        from zoneinfo import ZoneInfo
+
+        from django.utils import timezone
+
+        return (timezone.now() - timedelta(minutes=minutes_ago)).astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S")
+
+    def test_create_get_renew_revoke(self):
+        url = "/api/card-manager/otp-link/"
+        self.assertIsNone(self.as_(self.a).post(url, {**self.card, "action": "get"}, format="json").data["link"])
+        t1 = self.as_(self.a).post(url, {**self.card, "action": "create"}, format="json").data["link"]["token"]
+        # 再 create 还是同一个链接
+        self.assertEqual(self.as_(self.a).post(url, {**self.card, "action": "create"}, format="json").data["link"]["token"], t1)
+        t2 = self.as_(self.a).post(url, {**self.card, "action": "renew"}, format="json").data["link"]["token"]
+        self.assertNotEqual(t1, t2)
+        pub = APIClient()
+        self.assertEqual(pub.get(f"/api/otp/{t1}/json/").status_code, 404)  # 旧链接作废
+        self.assertEqual(pub.get(f"/api/otp/{t2}/json/").status_code, 200)
+        self.assertTrue(self.as_(self.a).post(url, {**self.card, "action": "revoke"}, format="json").data["ok"])
+        self.assertEqual(pub.get(f"/api/otp/{t2}/json/").status_code, 404)
+
+    def test_staff_scope(self):
+        r = self.as_(self.b).post("/api/card-manager/otp-link/", {**self.card, "action": "create"}, format="json")
+        self.assertEqual(r.status_code, 403)
+
+    def test_upload_and_public(self):
+        token = self.as_(self.a).post("/api/card-manager/otp-link/", {**self.card, "action": "create"}, format="json").data["link"]["token"]
+        items = [
+            {"card_id": "C9", "payment_no": "P1", "code": "814362", "trans_time": self.now_cst(1)},
+            {"card_id": "C9", "payment_no": "P0", "code": "111111", "trans_time": self.now_cst(30)},  # 太旧，不显示
+            {"card_id": "OTHER", "payment_no": "P2", "code": "222222", "trans_time": self.now_cst(1)},  # 别的卡
+            {"card_id": "C9", "payment_no": "P3", "code": "abc", "trans_time": self.now_cst(1)},  # 格式不对
+        ]
+        self.assertEqual(self.as_(self.a).post("/api/card-manager/otp-codes/", {"items": items}, format="json").status_code, 403)  # 员工不能传
+        r = self.as_(self.boss).post("/api/card-manager/otp-codes/", {"items": items}, format="json")
+        self.assertEqual(r.data["created"], 3)
+        self.assertEqual(self.as_(self.boss).post("/api/card-manager/otp-codes/", {"items": items}, format="json").data["created"], 0)  # 重复不再存
+        d = APIClient().get(f"/api/otp/{token}/json/").data
+        self.assertEqual(d["card"], "493724****6234")
+        self.assertEqual([c["code"] for c in d["codes"]], ["814362"])
+        self.assertNotIn("冬", str(d))  # 不给客户看备注
+        page = APIClient().get(f"/api/otp/{token}/")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("卡片验证码", page.content.decode())

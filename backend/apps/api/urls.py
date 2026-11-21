@@ -128,6 +128,10 @@ urlpatterns = [
     path("card-fx/settings/", card_fx_views.CardFxSettingsAPIView.as_view(), name="card-fx-settings"),
     path("card-manager/me/", card_manager_views.CardManagerMeAPIView.as_view(), name="card-manager-me"),
     path("card-manager/risk-handled/", card_manager_views.CardRiskHandledAPIView.as_view(), name="card-manager-risk-handled"),
+    path("card-manager/otp-link/", card_manager_views.CardOtpLinkAPIView.as_view(), name="card-manager-otp-link"),
+    path("card-manager/otp-codes/", card_manager_views.CardOtpCodesAPIView.as_view(), name="card-manager-otp-codes"),
+    path("otp/<str:token>/", card_manager_views.public_otp_page, name="public-otp-page"),
+    path("otp/<str:token>/json/", card_manager_views.PublicOtpJsonAPIView.as_view(), name="public-otp-json"),
     path(
         "card-manager/risk-handled/undo/",
         card_manager_views.CardRiskHandledUndoAPIView.as_view(),
