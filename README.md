@@ -59,6 +59,11 @@ cd backend
 
 首次执行清理命令必须使用 `--dry-run` 核对结果。
 
+### 邮件推送（QQ 邮箱 → 企微群）
+
+管理后台「邮件推送」页设置邮箱和规则；收信由常驻服务 `xinhuo-mailpush`（`manage.py run_mail_push`）完成。
+部署、命令见 [docs/MAIL_PUSH.md](docs/MAIL_PUSH.md)。更新代码后记得同时 `systemctl restart xinhuo-mailpush`。
+
 ### 日元充值汇率
 
 职员端大厅顶部显示「日元充值该充多少美元」，系数在管理后台「日元充值汇率」页修改（仅超级管理员）。

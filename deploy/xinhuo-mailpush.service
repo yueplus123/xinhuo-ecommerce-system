@@ -1,0 +1,19 @@
+# 邮件推送收信服务（QQ 邮箱 → 企业微信群），见 docs/MAIL_PUSH.md
+# 安装：User 要和后端服务（xinhuo-backend）一致，docs/MAIL_PUSH.md 里的命令会自动替换
+[Unit]
+Description=Xinhuo mail push (QQ mail to WeCom)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/xinhuo/app
+Environment=PYTHONPATH=/var/www/xinhuo/app
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/var/www/xinhuo/app/.venv/bin/python backend/manage.py run_mail_push
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

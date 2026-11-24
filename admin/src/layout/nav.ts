@@ -49,7 +49,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { title: '职员账号', desc: '新增 / 停用职员，重置密码', path: '/users', icon: 'User' },
       { title: '收款记录管理', desc: '全员收款记录，可筛选 / 导出 Excel', path: '/payment-records', icon: 'Tickets' },
       { title: '订阅提醒管理', desc: '汇总查看各员工的订阅提醒', path: '/subscription-reminders', icon: 'Bell' },
-      { title: '卡管家权限', desc: '薪火卡管家插件：每个职员能看哪些备注的汇通卡', path: '/card-scope', icon: 'CreditCard' }
+      { title: '卡管家权限', desc: '薪火卡管家插件：每个职员能看哪些备注的汇通卡', path: '/card-scope', icon: 'CreditCard' },
+      { title: '邮件推送', desc: 'QQ 邮箱里特定的邮件自动推送到企微群（规则、记录、观察模式）', path: '/mail-push', icon: 'Message' }
     ]
   }
 ]
