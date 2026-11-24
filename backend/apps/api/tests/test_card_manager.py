@@ -127,6 +127,21 @@ class RiskHandledTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(sorted(x["risk"] for x in self.as_(self.a).get("/api/card-manager/risk-handled/").data["results"]), ["keep", "notify", "pay"])
 
+    def test_problem_and_tag_never_expire(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from backend.apps.catalog.models import CardRiskHandled
+
+        items = [self.item(card_id="C7", risk="problem", note="客户投诉"), self.item(card_id="C7", risk="tag", mark="pg"), self.item(card_id="C7", risk="cvv")]
+        self.as_(self.a).post("/api/card-manager/risk-handled/", {"items": items}, format="json")
+        CardRiskHandled.objects.filter(card_id="C7").update(handled_at=timezone.now() - timedelta(days=400))
+        rows = self.as_(self.boss).get("/api/card-manager/risk-handled/").data["results"]
+        got = {r["risk"]: r for r in rows if r["card_id"] == "C7"}
+        self.assertEqual(set(got), {"problem", "tag"})  # cvv 超过 180 天不返回，问题组和标签一直在
+        self.assertEqual(got["problem"]["note"], "客户投诉")
+
     def test_staff_cannot_mark_others_card(self):
         r = self.as_(self.b).post("/api/card-manager/risk-handled/", {"items": [self.item()]}, format="json")
         self.assertEqual(r.status_code, 403)

@@ -92,7 +92,9 @@ def me_payload(user) -> dict:
 
 # ---------------- 风险卡「已处理」记录 ----------------
 # 风险卡 7 种 + pay（消费明细的失败交易，card_id 存交易号）+ notify（月末通知充值）+ keep（月末保留不销）
-RISK_KEYS = {"of", "cvv", "nosup", "nobal", "silent", "near", "expired", "pay", "notify", "keep"}
+RISK_KEYS = {"of", "cvv", "nosup", "nobal", "silent", "near", "expired", "pay", "notify", "keep", "problem", "tag"}
+# problem（问题组，note 是问题说明）、tag（商户标签 P站 / GPT，mark 是 p / g / pg）长期有效，不受 180 天限制
+LONG_KEYS = {"problem", "tag"}
 RESULTS = {k for k, _ in CardRiskHandled.RESULT_CHOICES}
 HANDLED_KEEP_DAYS = 180  # 插件只取最近 180 天的处理记录
 MAX_BATCH = 500
@@ -124,8 +126,14 @@ def list_handled(user) -> list[dict]:
 
     from django.utils import timezone
 
+    from django.db.models import Q
+
     since = timezone.now() - timedelta(days=HANDLED_KEEP_DAYS)
-    qs = CardRiskHandled.objects.filter(handled_at__gte=since).select_related("handled_by").order_by("-handled_at")
+    qs = (
+        CardRiskHandled.objects.filter(Q(handled_at__gte=since) | Q(risk__in=LONG_KEYS))
+        .select_related("handled_by")
+        .order_by("-handled_at")
+    )
     kws = keywords_of(user)
     return [handled_row(h) for h in qs if can_see_remark(user, h.card_remark, kws)]
 
