@@ -37,6 +37,7 @@ export const NAV_GROUPS: NavGroup[] = [
         path: '/knowledge',
         icon: 'Notebook'
       },
+      { title: '月度目标', desc: '每月一个全公司 GMV 目标（职员端数据大屏「本月目标」）', path: '/gmv-target', icon: 'Aim' },
       { title: '日元充值汇率', desc: '自动汇率 + 系数（职员端大厅顶部、企微群每天 08:30 推送）', path: '/card-fx', icon: 'Money' },
       { title: '平台标签池', desc: '平台的标签选项', path: '/platform-tag-pool', icon: 'PriceTag' },
       { title: '渠道池', desc: 'SKU 的渠道标签选项', path: '/channel-tag-pool', icon: 'Share' },

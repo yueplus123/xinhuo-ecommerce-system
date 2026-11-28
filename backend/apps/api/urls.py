@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import admin_catalog_views, card_fx_views, card_manager_views, catalog_library, duty_views, knowledge_views, ledger_views, mail_push_views, manage_accounts, manage_catalog, manage_content, manage_pools, manage_sku, views
+from . import admin_catalog_views, card_fx_views, gmv_target_views, card_manager_views, catalog_library, duty_views, knowledge_views, ledger_views, mail_push_views, manage_accounts, manage_catalog, manage_content, manage_pools, manage_sku, views
 
 app_name = "api"
 
@@ -50,6 +50,7 @@ urlpatterns = [
     path("ledger/wallet/<str:pk>/", ledger_views.WalletDetailAPIView.as_view(), name="ledger-wallet-detail"),
     path("ledger/stats/", ledger_views.LedgerStatsAPIView.as_view(), name="ledger-stats"),
     path("data-screen/", views.DataScreenAPIView.as_view(), name="data-screen"),
+    path("admin/gmv-targets/", gmv_target_views.GmvTargetAPIView.as_view(), name="admin-gmv-targets"),
     path("platforms/", views.PlatformListAPIView.as_view(), name="platform_list"),
     path(
         "platforms/export-businesses/",

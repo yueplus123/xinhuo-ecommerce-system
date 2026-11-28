@@ -1457,3 +1457,27 @@ class MailPushRecord(models.Model):
 
     def __str__(self) -> str:
         return f"[{self.status}] {self.subject}"
+
+
+class MonthlyGmvTarget(models.Model):
+    """数据大屏「本月目标」：每个月一个全公司 GMV 目标，只在管理后台设置。"""
+
+    month = models.DateField(unique=True, verbose_name="月份（当月 1 日）")
+    target = models.DecimalField(max_digits=14, decimal_places=2, verbose_name="GMV 目标（元）")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="最后修改人",
+    )
+
+    class Meta:
+        ordering = ["-month"]
+        verbose_name = "月度 GMV 目标"
+        verbose_name_plural = "月度 GMV 目标"
+
+    def __str__(self) -> str:
+        return f"{self.month:%Y-%m} {self.target}"

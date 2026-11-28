@@ -28,6 +28,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'tutorial-pool', redirect: '/knowledge' },
       { path: 'phrase-pool', redirect: '/knowledge' },
       { path: 'quick-phrases', redirect: '/knowledge' },
+      page('月度目标', 'gmv-target', () => import('@/views/Pools/GmvTargetPage.vue')),
       page('日元充值汇率', 'card-fx', () => import('@/views/Pools/CardFxPage.vue')),
       page('平台标签池', 'platform-tag-pool', () => import('@/views/Pools/PlatformTagPoolPage.vue')),
       page('渠道池', 'channel-tag-pool', () => import('@/views/Pools/ChannelTagPoolPage.vue')),
