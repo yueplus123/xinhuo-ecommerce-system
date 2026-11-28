@@ -13,8 +13,6 @@ import {
   ElProgress,
   ElRow,
   ElSelect,
-  ElTable,
-  ElTableColumn,
   ElTag
 } from 'element-plus'
 import { Refresh, FullScreen } from '@element-plus/icons-vue'
@@ -71,6 +69,14 @@ function periodData(def: { key: string }) {
 }
 
 const summary = computed(() => periodData(activePeriodDef()).summary || {})
+/** 「比上月同期」/「比上周同期」/「比去年同期」/「比前月」 */
+const cmpLabel = computed(() => String(summary.value.cmp_label || ''))
+const cmpFooter = computed(() => (cmpLabel.value ? `比${cmpLabel.value}` : '环比'))
+function prevLine(v: any, kind: 'money' | 'int' | 'usd' = 'money') {
+  if (v === null || v === undefined || v === '' || !cmpLabel.value) return ''
+  const n = kind === 'int' ? fmtInt(v) : `${kind === 'usd' ? '$' : '¥'}${fmt(v)}`
+  return `${cmpLabel.value} ${n}`
+}
 
 /** 收款概览：4 项主 KPI */
 const kpiCards = computed(() => {
@@ -82,8 +88,9 @@ const kpiCards = computed(() => {
       value: safeNum(s.total_gmv),
       prefix: '¥',
       precision: 2,
-      footer: '环比增长',
+      footer: cmpFooter.value,
       delta: s.gmv_change_pct,
+      prevText: prevLine(s.prev_total_gmv),
       tone: 'money',
       icon: '💰'
     },
@@ -104,10 +111,23 @@ const kpiCards = computed(() => {
       value: safeNum(s.order_count),
       prefix: '',
       precision: 0,
-      footer: '环比增长',
+      footer: cmpFooter.value,
       delta: s.order_change_pct,
+      prevText: prevLine(s.prev_order_count, 'int'),
       tone: 'message',
       icon: '📋'
+    },
+    {
+      key: 'aov',
+      title: '客单价',
+      value: safeNum(s.aov),
+      prefix: '¥',
+      precision: 2,
+      footer: cmpFooter.value,
+      delta: s.aov_change_pct,
+      prevText: prevLine(s.prev_aov),
+      tone: 'shopping',
+      icon: '🧮'
     },
     {
       key: 'refund',
@@ -132,7 +152,6 @@ const BOT_CARD_META: Record<string, { icon: string; tone: string }> = {
   patreon: { icon: '🧡', tone: 'shopping' },
   booth: { icon: '🏪', tone: 'message' },
   pictspace: { icon: '🖼', tone: 'money' },
-  remote: { icon: '🖥', tone: 'peoples' },
   premium: { icon: '⭐', tone: 'shopping' },
   mega: { icon: '💾', tone: 'peoples' },
   chatgpt: { icon: '🤖', tone: 'message' },
@@ -152,19 +171,29 @@ const botBusinessCards = computed(() => {
         value: safeNum(r.value),
         prefix: isUsdt ? '$' : isCny ? '¥' : '',
         precision: isUsdt || isCny ? 2 : 0,
-        footer: '环比',
+        footer: cmpFooter.value,
         delta: r.change_pct,
+        prevText: prevLine(r.prev_value, isUsdt ? 'usd' : isCny ? 'money' : 'int'),
         tone: meta.tone,
         icon: meta.icon
       }
     })
 })
 
-/** 收款概览统一网格：主 KPI + BOT，卡片尺寸一致 */
-const overviewCards = computed(() => [...kpiCards.value, ...botBusinessCards.value])
+/** 本月目标（只在「本月」显示；GMV 卡挪到目标条左边） */
+const goal = computed(() => (activePeriod.value === 'month' ? payload.value?.month?.goal || null : null))
+const gmvTop = computed(() => (goal.value ? [kpiCards.value[0]] : []))
+const goalBarDone = computed(() => Math.min(safeNum(goal.value?.done_pct), 100))
+const goalBarForecast = computed(() => Math.min(safeNum(goal.value?.forecast_pct), 100))
 
+/** 收款概览统一网格：主 KPI + BOT，卡片尺寸一致（本月时 GMV 在目标条旁边，不在网格里） */
+const overviewCards = computed(() => {
+  const main = goal.value ? kpiCards.value.slice(1) : kpiCards.value
+  return [...main, ...botBusinessCards.value]
+})
+
+// 「各成员 GMV」横条图已删除：与「成员收款额排行」重复，排行放在它原来的位置
 const memberPanels = [
-  { id: 'ds-period-gmv', title: '各成员 GMV', icon: '💰', tone: 'money' },
   { id: 'ds-period-shilei', title: '各成员十类收款', icon: '🏦', tone: 'shopping' },
   { id: 'ds-period-orders', title: '各成员订单数', icon: '📋', tone: 'message' },
   { id: 'ds-period-refund', title: '各成员退款金额', icon: '⏳', tone: 'peoples' }
@@ -181,7 +210,6 @@ function hasKpiFooter(card: {
   return false
 }
 
-const channelRankData = computed(() => periodData(activePeriodDef()).channel_rank_list || [])
 const staffRankData = computed(() => {
   const staff = [...(periodData(activePeriodDef()).staff || [])].sort(
     (a: any, b: any) => safeNum(b.gmv) - safeNum(a.gmv)
@@ -212,6 +240,89 @@ const STAFF_LINE_PALETTE = [
 ]
 
 const staffDailyTitle = computed(() => `${activePeriodDef().label}各成员每日收款趋势`)
+
+/** 各成员 本周期 vs 同期 */
+const staffCompare = computed(() => periodData(activePeriodDef()).staff_compare || [])
+const staffCompareTotal = computed(() => {
+  const s = summary.value
+  return { gmv: safeNum(s.total_gmv), prev: safeNum(s.prev_total_gmv), pct: s.gmv_change_pct }
+})
+const compareTitle = computed(() => `各成员 GMV · ${activePeriodDef().label} vs ${cmpLabel.value || '同期'}`)
+const compareRange = computed(() => {
+  const s = summary.value
+  const md = (x: string) => (x ? `${Number(x.slice(5, 7))}/${Number(x.slice(8, 10))}` : '')
+  return s.cmp_from ? `${md(s.date_from)}–${md(s.date_to)} 对比 ${md(s.cmp_from)}–${md(s.cmp_to)}` : ''
+})
+
+/** 每日收款 · 本月和近 3 个月（不随周期；员工只能选自己 / 全部） */
+const daily4m = computed(() => payload.value?.daily_4m || null)
+const daily4mKey = ref('')
+watch(
+  daily4m,
+  (v) => {
+    if (!v) return
+    if (!daily4mKey.value || !v.series?.[daily4mKey.value]) daily4mKey.value = v.default || 'all'
+  },
+  { immediate: true }
+)
+const DAILY4M_COLORS = ['#0f6a4f', '#36a3f7', '#e6a23c', '#b1b8c4']
+const daily4mSums = computed(() => {
+  const v = daily4m.value
+  const rows = v?.series?.[daily4mKey.value] || []
+  return (v?.months || []).map((m: any, i: number) => {
+    const arr: number[] = rows[i] || []
+    const total = arr.reduce((a, b) => a + safeNum(b), 0)
+    return {
+      label: m.label,
+      range: i === 0 ? `（1–${m.upto}日）` : '整月',
+      total,
+      avg: arr.length ? total / arr.length : 0,
+      color: DAILY4M_COLORS[i]
+    }
+  })
+})
+
+function renderDaily4m() {
+  const v = daily4m.value
+  if (!v) return
+  const rows = v.series?.[daily4mKey.value] || []
+  const days = Array.from({ length: 31 }, (_, i) => `${i + 1}日`)
+  mountChart('ds-chart-daily-4m', {
+    grid: { left: '2%', right: '2%', bottom: '4%', top: 40, containLabel: true },
+    legend: { top: 0, data: (v.months || []).map((m: any) => m.label) },
+    tooltip: { trigger: 'axis', valueFormatter: (x: any) => (x === null || x === undefined ? '—' : fmt(x)) },
+    xAxis: { type: 'category', data: days, boundaryGap: false, axisLabel: { color: '#64748b' } },
+    yAxis: {
+      type: 'value',
+      axisLabel: { color: '#64748b' },
+      splitLine: { lineStyle: { color: 'rgba(15,31,24,.08)' } }
+    },
+    series: (v.months || []).map((m: any, i: number) => {
+      const arr: number[] = rows[i] || []
+      const color = DAILY4M_COLORS[i]
+      return {
+        name: m.label,
+        type: 'line',
+        smooth: true,
+        z: 10 - i,
+        symbol: i === 0 ? 'circle' : 'none',
+        symbolSize: 5,
+        data: days.map((_, d) => (d < arr.length ? safeNum(arr[d]) : null)),
+        itemStyle: { color },
+        lineStyle: { color, width: i === 0 ? 3 : 2 },
+        ...(i === 0 ? { areaStyle: { color: 'rgba(15,106,79,.08)' } } : {})
+      }
+    })
+  })
+}
+// 切换人员时重画（第一次由 load() 统一绘制）
+watch(daily4mKey, (_v, old) => {
+  if (!old) return
+  nextTick(() => {
+    animMode = 'enter'
+    renderDaily4m()
+  })
+})
 
 registerEchartsThemes()
 const appStore = useAppStore()
@@ -391,36 +502,8 @@ function barOption(staff: any[], field: string, color: string, isInt = false) {
 function renderFixedCharts() {
   if (!payload.value) return
 
-  const monthTrend = payload.value.month_sales_trend || []
-  mountChart('ds-chart-month-trend', {
-    grid: { left: '2%', right: '2%', bottom: '4%', top: '10%', containLabel: true },
-    tooltip: { trigger: 'axis', valueFormatter: (v: any) => fmt(v) },
-    xAxis: {
-      type: 'category',
-      data: monthTrend.map((x: any) => x.date),
-      axisLabel: {
-        color: '#64748b',
-        interval: monthTrend.length > 20 ? Math.floor(monthTrend.length / 10) : 0
-      },
-      axisLine: { lineStyle: { color: '#e2e8f0' } }
-    },
-    yAxis: {
-      type: 'value',
-      axisLabel: { color: '#64748b' },
-      splitLine: { lineStyle: { color: 'rgba(15,31,24,.08)' } }
-    },
-    series: [
-      {
-        type: 'line',
-        smooth: true,
-        data: monthTrend.map((x: any) => safeNum(x.sales)),
-        lineStyle: { color: '#0f6a4f', width: 2 },
-        areaStyle: { color: 'rgba(15,106,79,.12)' },
-        symbol: monthTrend.length > 40 ? 'none' : 'circle',
-        symbolSize: 6
-      }
-    ]
-  })
+  // 「本月销售趋势」已删除：和「每日收款 · 本月和近 3 个月」选「全部」时的本月线重复
+  renderDaily4m()
 
   const historyGmv = payload.value.history_month_gmv || []
   mountChart('ds-chart-history-gmv', {
@@ -455,7 +538,56 @@ function renderPeriodCharts() {
   if (!payload.value) return
   const def = activePeriodDef()
   const d = periodData(def)
-  mountChart('ds-period-gmv', barOption(d.staff, 'gmv', '#0f6a4f'))
+  const cmp = d.staff_compare || []
+  const cmpName = cmpLabel.value || '同期'
+  mountChart('ds-chart-staff-compare', {
+    grid: { left: '2%', right: '2%', bottom: '4%', top: 40, containLabel: true },
+    legend: { top: 0, data: [def.label, cmpName] },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (ps: any) => {
+        const r = cmp[ps?.[0]?.dataIndex ?? 0]
+        if (!r) return ''
+        const pct = fmtPct(r.change_pct)
+        const color = safeNum(r.change_pct) >= 0 ? '#16a34a' : '#dc2626'
+        return `<b>${r.user__username}</b><br/>${def.label}：¥${fmt(r.gmv)}<br/>${cmpName}：¥${fmt(r.prev_gmv)}<br/>增长：<span style="color:${color}">${pct}</span>`
+      }
+    },
+    xAxis: { type: 'category', data: cmp.map((r: any) => r.user__username), axisLabel: { color: '#475569' } },
+    yAxis: {
+      type: 'value',
+      axisLabel: { color: '#64748b' },
+      splitLine: { lineStyle: { color: 'rgba(15,31,24,.08)' } }
+    },
+    series: [
+      {
+        name: def.label,
+        type: 'bar',
+        data: cmp.map((r: any) => safeNum(r.gmv)),
+        barMaxWidth: 26,
+        itemStyle: { color: '#0f6a4f', borderRadius: [6, 6, 0, 0] },
+        label: {
+          show: true,
+          position: 'top',
+          fontSize: 11,
+          formatter: (o: any) => {
+            const v = cmp[o.dataIndex]?.change_pct
+            const n = safeNum(v)
+            return `{${n >= 0 ? 'u' : 'd'}|${n > 0 ? '+' : ''}${n.toFixed(1)}%}`
+          },
+          rich: { u: { color: '#16a34a', fontWeight: 700 }, d: { color: '#dc2626', fontWeight: 700 } }
+        }
+      },
+      {
+        name: cmpName,
+        type: 'bar',
+        data: cmp.map((r: any) => safeNum(r.prev_gmv)),
+        barMaxWidth: 26,
+        itemStyle: { color: '#cbd5e1', borderRadius: [6, 6, 0, 0] }
+      }
+    ]
+  })
   mountChart('ds-period-shilei', barOption(d.staff, 'shilei', '#c2410c'))
   mountChart('ds-period-orders', barOption(d.staff, 'order_count', '#0e7490', true))
   mountChart('ds-period-refund', barOption(d.staff, 'refund', '#7c3aed'))
@@ -741,6 +873,82 @@ onBeforeUnmount(() => {
           <h3 class="ds-section__title">收款概览</h3>
           <span class="ds-section__hint">随周期 · {{ activePeriodDef().label }}（含微信BOT）</span>
         </div>
+        <div v-if="goal" class="ds-goal-row">
+          <article
+              v-for="card in gmvTop"
+              :key="card.key"
+              class="kpi-tile"
+              :class="`kpi-tile--${card.tone || 'message'} kpi-tile--big`"
+            >
+              <div class="kpi-tile__head">
+                <span class="kpi-tile__icon" aria-hidden="true">{{ card.icon }}</span>
+                <span class="kpi-tile__title">{{ card.title }}</span>
+              </div>
+              <div class="kpi-tile__value">
+                <span v-if="card.prefix" class="kpi-tile__prefix">{{ card.prefix }}</span>
+                <span class="kpi-tile__num">
+                  <OdometerNumber
+                    :key="`${card.key}-${animEpoch}`"
+                    :value="card.value"
+                    :precision="card.precision === 2 ? 2 : 0"
+                    :from-zero="true"
+                  />
+                </span>
+              </div>
+              <div class="kpi-tile__meta">
+                <template v-if="hasKpiFooter(card)">
+                  <span v-if="card.footer" class="kpi-tile__meta-label">{{ card.footer }}</span>
+                  <span
+                    v-if="card.delta !== null && card.delta !== undefined && card.delta !== ''"
+                    class="kpi-tile__delta"
+                    :class="`is-${deltaTone(card.delta)}`"
+                  >
+                    {{ fmtPct(card.delta) }}
+                  </span>
+                  <span v-else-if="card.ratioText" class="kpi-tile__delta is-flat">{{
+                    card.ratioText
+                  }}</span>
+                </template>
+                <span v-else class="kpi-tile__meta-spacer">&nbsp;</span>
+              </div>
+              <div v-if="card.prevText" class="kpi-tile__prev">{{ card.prevText }}</div>
+            </article>
+          <div class="ds-goal">
+            <div class="ds-goal__main">
+              <div class="ds-goal__head">
+                <span class="kpi-tile__icon ds-goal__icon" aria-hidden="true">🎯</span>
+                <template v-if="goal.target">
+                  <span>本月目标</span><b>¥{{ fmt(goal.target) }}</b>
+                </template>
+                <span v-else class="ds-goal__muted">本月未设目标（管理后台 · 资源池 → 月度目标）</span>
+              </div>
+              <template v-if="goal.target">
+                <div class="ds-goal__bar">
+                  <i :style="{ width: `${goalBarDone}%` }"></i>
+                  <em v-if="goal.forecast_pct !== null" :style="{ left: `${goalBarForecast}%` }" title="月底预测"></em>
+                </div>
+                <div class="ds-goal__sub">
+                  已完成 <b>{{ goal.done_pct }}%</b> · 剩 {{ goal.days_left }} 天（含今天） · 每天还需
+                  <b>¥{{ fmt(goal.per_day_needed) }}</b>
+                </div>
+              </template>
+            </div>
+            <div class="ds-goal__side">
+              <span class="ds-goal__muted">月底预测</span>
+              <template v-if="goal.forecast !== null">
+                <b class="ds-goal__num">¥{{ fmt(goal.forecast) }}</b>
+                <small
+                  v-if="goal.target"
+                  :class="safeNum(goal.forecast_pct) >= 100 ? 'is-up' : 'is-down'"
+                >
+                  {{ safeNum(goal.forecast_pct) >= 100 ? '预计完成' : `预计差 ¥${fmt(goal.target - goal.forecast)}` }}（{{ goal.forecast_pct }}%）
+                </small>
+                <small class="ds-goal__muted">按前 {{ goal.days_in_month - goal.days_left }} 天日均 ¥{{ fmt(goal.avg_daily) }} 推算</small>
+              </template>
+              <small v-else class="ds-goal__muted">1 号还没有完整的一天，明天开始预测</small>
+            </div>
+          </div>
+        </div>
         <div class="kpi-mosaic">
           <article
             v-for="card in overviewCards"
@@ -779,6 +987,7 @@ onBeforeUnmount(() => {
               </template>
               <span v-else class="kpi-tile__meta-spacer">&nbsp;</span>
             </div>
+            <div v-if="card.prevText" class="kpi-tile__prev">{{ card.prevText }}</div>
           </article>
         </div>
       </section>
@@ -789,131 +998,9 @@ onBeforeUnmount(() => {
           <h3 class="ds-section__title">成员表现</h3>
           <span class="ds-section__hint">随周期 · {{ activePeriodDef().label }}</span>
         </div>
-        <ElRow :gutter="16">
-          <ElCol
-            v-for="item in memberPanels"
-            :key="item.id"
-            :xs="24"
-            :sm="12"
-            :lg="6"
-          >
-            <ElCard shadow="never" class="ds-panel">
-              <template #header>
-                <div class="ds-panel-head">
-                  <span class="ds-soft-icon" :class="`ds-soft-icon--${item.tone}`" aria-hidden="true">{{
-                    item.icon
-                  }}</span>
-                  <span>{{ item.title }}</span>
-                </div>
-              </template>
-              <div :id="item.id" class="ds-member-chart" />
-            </ElCard>
-          </ElCol>
-        </ElRow>
-      </section>
-
-      <!-- 3. 销售趋势 -->
-      <section class="ds-section">
-        <div class="ds-section__header">
-          <h3 class="ds-section__title">销售趋势</h3>
-          <span class="ds-section__hint">不随周期筛选</span>
-        </div>
-        <ElRow :gutter="16">
-          <ElCol :xs="24" :lg="12">
-            <ElCard shadow="never" class="ds-panel">
-              <template #header>
-                <div class="ds-panel-head">
-                  <span class="ds-soft-icon ds-soft-icon--shopping" aria-hidden="true">📈</span>
-                  <span>本月销售趋势</span>
-                </div>
-              </template>
-              <div id="ds-chart-month-trend" class="ds-chart" />
-            </ElCard>
-          </ElCol>
-          <ElCol :xs="24" :lg="12">
-            <ElCard shadow="never" class="ds-panel">
-              <template #header>
-                <div class="ds-panel-head">
-                  <span class="ds-soft-icon ds-soft-icon--message" aria-hidden="true">📉</span>
-                  <span>每月 GMV 趋势（近12个月）</span>
-                </div>
-              </template>
-              <div id="ds-chart-history-gmv" class="ds-chart" />
-            </ElCard>
-          </ElCol>
-        </ElRow>
-      </section>
-
-      <!-- 4. 渠道分析 -->
-      <section class="ds-section">
-        <div class="ds-section__header">
-          <h3 class="ds-section__title">渠道分析</h3>
-          <span class="ds-section__hint">随周期 · {{ activePeriodDef().label }}</span>
-        </div>
-        <ElRow :gutter="16">
-          <ElCol :xs="24" :lg="8">
-            <ElCard shadow="never" class="ds-panel">
-              <template #header>
-                <div class="ds-panel-head">
-                  <span class="ds-soft-icon ds-soft-icon--money" aria-hidden="true">🥧</span>
-                  <span>渠道订单占比</span>
-                </div>
-              </template>
-              <div id="ds-chart-channel" class="ds-chart" />
-            </ElCard>
-          </ElCol>
-          <ElCol :xs="24" :lg="8">
-            <ElCard shadow="never" class="ds-panel">
-              <template #header>
-                <div class="ds-panel-head">
-                  <span class="ds-soft-icon ds-soft-icon--shopping" aria-hidden="true">📊</span>
-                  <span>各渠道收款净额</span>
-                </div>
-              </template>
-              <div id="ds-chart-channel-bar" class="ds-chart" />
-            </ElCard>
-          </ElCol>
-          <ElCol :xs="24" :lg="8">
-            <ElCard shadow="never" class="ds-panel">
-              <template #header>
-                <div class="ds-panel-head">
-                  <span class="ds-soft-icon ds-soft-icon--peoples" aria-hidden="true">🏅</span>
-                  <span>渠道订单排行</span>
-                </div>
-              </template>
-              <ElTable :data="channelRankData" stripe style="width: 100%" max-height="260">
-                <ElTableColumn prop="channel" label="渠道" min-width="100" />
-                <ElTableColumn label="订单数" min-width="80">
-                  <template #default="scope">
-                    {{ scope?.row ? fmtInt(scope.row.c) : '' }}
-                  </template>
-                </ElTableColumn>
-              </ElTable>
-            </ElCard>
-          </ElCol>
-        </ElRow>
-      </section>
-
-      <!-- 5. 成员明细 -->
-      <section class="ds-section">
-        <div class="ds-section__header">
-          <h3 class="ds-section__title">成员明细</h3>
-          <span class="ds-section__hint">随周期 · {{ activePeriodDef().label }}</span>
-        </div>
-        <ElRow :gutter="16">
-          <ElCol :xs="24" :lg="14">
-            <ElCard shadow="never" class="ds-panel">
-              <template #header>
-                <div class="ds-panel-head">
-                  <span class="ds-soft-icon ds-soft-icon--message" aria-hidden="true">📈</span>
-                  <span>{{ staffDailyTitle }}</span>
-                </div>
-              </template>
-              <div id="ds-chart-staff-daily" class="ds-chart ds-chart--tall" />
-            </ElCard>
-          </ElCol>
-          <ElCol :xs="24" :lg="10">
-            <ElCard shadow="never" class="ds-panel ds-panel--rank">
+        <ElRow :gutter="16" class="ds-row-gap">
+          <ElCol :xs="24" :sm="12" :lg="6">
+            <ElCard shadow="never" class="ds-panel ds-panel--rank ds-panel--rank-sm">
               <template #header>
                 <div class="ds-panel-head">
                   <span class="ds-soft-icon ds-soft-icon--money" aria-hidden="true">🏆</span>
@@ -938,6 +1025,180 @@ onBeforeUnmount(() => {
                 />
               </div>
               <div v-if="!staffRankData.length" class="ds-empty">暂无数据</div>
+            </ElCard>
+          </ElCol>
+          <ElCol
+            v-for="item in memberPanels"
+            :key="item.id"
+            :xs="24"
+            :sm="12"
+            :lg="6"
+          >
+            <ElCard shadow="never" class="ds-panel">
+              <template #header>
+                <div class="ds-panel-head">
+                  <span class="ds-soft-icon" :class="`ds-soft-icon--${item.tone}`" aria-hidden="true">{{
+                    item.icon
+                  }}</span>
+                  <span>{{ item.title }}</span>
+                </div>
+              </template>
+              <div :id="item.id" class="ds-member-chart" />
+            </ElCard>
+          </ElCol>
+        </ElRow>
+        <ElRow v-if="daily4m" :gutter="16" class="ds-row-gap">
+          <ElCol :xs="24">
+            <ElCard shadow="never" class="ds-panel">
+              <template #header>
+                <div class="ds-panel-head">
+                  <span class="ds-soft-icon ds-soft-icon--shopping" aria-hidden="true">📅</span>
+                  <span>每日收款 · 本月和近 3 个月</span>
+                  <span class="ds-panel-sub">不随周期筛选 · 横轴按每月 1–31 日对齐</span>
+                  <ElSelect v-model="daily4mKey" size="small" class="ds-panel-pick">
+                    <ElOption v-for="o in daily4m.options" :key="o.key" :label="o.name" :value="o.key" />
+                  </ElSelect>
+                </div>
+              </template>
+              <div id="ds-chart-daily-4m" class="ds-chart ds-chart--tall" />
+              <div class="ds-4m-sum">
+                <span v-for="m in daily4mSums" :key="m.label">
+                  <i :style="{ background: m.color }"></i>{{ m.label }}{{ m.range }}：<b>¥{{ fmt(m.total) }}</b>　日均
+                  <b>¥{{ fmt(m.avg) }}</b>
+                </span>
+              </div>
+            </ElCard>
+          </ElCol>
+        </ElRow>
+        <ElRow :gutter="16" class="ds-row-gap">
+          <ElCol :xs="24" :lg="14">
+            <ElCard shadow="never" class="ds-panel">
+              <template #header>
+                <div class="ds-panel-head">
+                  <span class="ds-soft-icon ds-soft-icon--money" aria-hidden="true">⚖️</span>
+                  <span>{{ compareTitle }}</span>
+                </div>
+              </template>
+              <div id="ds-chart-staff-compare" class="ds-chart" />
+            </ElCard>
+          </ElCol>
+          <ElCol :xs="24" :lg="10">
+            <ElCard shadow="never" class="ds-panel">
+              <template #header>
+                <div class="ds-panel-head">
+                  <span class="ds-soft-icon ds-soft-icon--message" aria-hidden="true">🧾</span>
+                  <span>各成员 {{ activePeriodDef().label }} vs {{ cmpLabel || '同期' }}</span>
+                  <span class="ds-panel-sub">{{ compareRange }}</span>
+                </div>
+              </template>
+              <div class="ds-cmp-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>成员</th>
+                      <th class="r">{{ activePeriodDef().label }}</th>
+                      <th class="r">{{ cmpLabel || '同期' }}</th>
+                      <th class="r">差额</th>
+                      <th class="r">增长</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="r in staffCompare" :key="r.user__username">
+                      <td>{{ r.user__username }}</td>
+                      <td class="r">¥{{ fmt(r.gmv) }}</td>
+                      <td class="r">¥{{ fmt(r.prev_gmv) }}</td>
+                      <td class="r" :class="`is-${deltaTone(r.gmv - r.prev_gmv)}`">
+                        {{ r.gmv - r.prev_gmv > 0 ? '+' : r.gmv - r.prev_gmv < 0 ? '−' : '' }}{{ fmt(Math.abs(r.gmv - r.prev_gmv)) }}
+                      </td>
+                      <td class="r kpi-tile__delta" :class="`is-${deltaTone(r.change_pct)}`">{{ fmtPct(r.change_pct) }}</td>
+                    </tr>
+                    <tr class="sum">
+                      <td>全部</td>
+                      <td class="r">¥{{ fmt(staffCompareTotal.gmv) }}</td>
+                      <td class="r">¥{{ fmt(staffCompareTotal.prev) }}</td>
+                      <td class="r" :class="`is-${deltaTone(staffCompareTotal.gmv - staffCompareTotal.prev)}`">
+                        {{ staffCompareTotal.gmv - staffCompareTotal.prev > 0 ? '+' : staffCompareTotal.gmv - staffCompareTotal.prev < 0 ? '−' : '' }}{{ fmt(Math.abs(staffCompareTotal.gmv - staffCompareTotal.prev)) }}
+                      </td>
+                      <td class="r kpi-tile__delta" :class="`is-${deltaTone(staffCompareTotal.pct)}`">{{ fmtPct(staffCompareTotal.pct) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div v-if="!staffCompare.length" class="ds-empty">暂无数据</div>
+              </div>
+            </ElCard>
+          </ElCol>
+        </ElRow>
+      </section>
+
+      <!-- 3. 销售趋势 -->
+      <section class="ds-section">
+        <div class="ds-section__header">
+          <h3 class="ds-section__title">销售趋势</h3>
+          <span class="ds-section__hint">不随周期筛选</span>
+        </div>
+        <ElRow :gutter="16">
+          <ElCol :xs="24">
+            <ElCard shadow="never" class="ds-panel">
+              <template #header>
+                <div class="ds-panel-head">
+                  <span class="ds-soft-icon ds-soft-icon--message" aria-hidden="true">📉</span>
+                  <span>每月 GMV 趋势（近12个月）</span>
+                </div>
+              </template>
+              <div id="ds-chart-history-gmv" class="ds-chart" />
+            </ElCard>
+          </ElCol>
+        </ElRow>
+      </section>
+
+      <!-- 4. 渠道分析 -->
+      <section class="ds-section">
+        <div class="ds-section__header">
+          <h3 class="ds-section__title">渠道分析</h3>
+          <span class="ds-section__hint">随周期 · {{ activePeriodDef().label }}</span>
+        </div>
+        <ElRow :gutter="16">
+          <ElCol :xs="24" :lg="12">
+            <ElCard shadow="never" class="ds-panel">
+              <template #header>
+                <div class="ds-panel-head">
+                  <span class="ds-soft-icon ds-soft-icon--money" aria-hidden="true">🥧</span>
+                  <span>渠道订单占比</span>
+                </div>
+              </template>
+              <div id="ds-chart-channel" class="ds-chart" />
+            </ElCard>
+          </ElCol>
+          <ElCol :xs="24" :lg="12">
+            <ElCard shadow="never" class="ds-panel">
+              <template #header>
+                <div class="ds-panel-head">
+                  <span class="ds-soft-icon ds-soft-icon--shopping" aria-hidden="true">📊</span>
+                  <span>各渠道收款净额</span>
+                </div>
+              </template>
+              <div id="ds-chart-channel-bar" class="ds-chart" />
+            </ElCard>
+          </ElCol>
+        </ElRow>
+      </section>
+
+      <!-- 5. 成员明细 -->
+      <section class="ds-section">
+        <div class="ds-section__header">
+          <h3 class="ds-section__title">成员明细</h3>
+          <span class="ds-section__hint">随周期 · {{ activePeriodDef().label }}</span>
+        </div>
+        <ElRow :gutter="16">
+          <ElCol :xs="24">
+            <ElCard shadow="never" class="ds-panel">
+              <template #header>
+                <div class="ds-panel-head">
+                  <span class="ds-soft-icon ds-soft-icon--message" aria-hidden="true">📈</span>
+                  <span>{{ staffDailyTitle }}</span>
+                </div>
+              </template>
+              <div id="ds-chart-staff-daily" class="ds-chart ds-chart--tall" />
             </ElCard>
           </ElCol>
         </ElRow>
@@ -1247,6 +1508,208 @@ onBeforeUnmount(() => {
   }
 }
 
+/* 本月目标条（GMV 卡在左边） */
+.ds-goal-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+  gap: 8px;
+}
+.kpi-tile--big {
+  justify-content: center;
+  padding: 12px 16px 10px;
+}
+.kpi-tile--big .kpi-tile__title {
+  font-size: 13px;
+}
+.kpi-tile--big .kpi-tile__num {
+  font-size: 26px;
+}
+.kpi-tile--big .kpi-tile__meta,
+.kpi-tile--big .kpi-tile__prev {
+  font-size: 12px;
+}
+.kpi-tile__prev {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--ui-muted, #9ca3af);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ds-goal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--ui-surface, #fff);
+  border: 1px solid var(--ui-border, #e8ecf1);
+  border-radius: 10px;
+}
+.ds-goal__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ui-text-2, #4b5563);
+}
+.ds-goal__head b {
+  font-size: 16px;
+  color: var(--ui-text, #111827);
+  font-variant-numeric: tabular-nums;
+}
+.ds-goal__icon {
+  background: rgba(64, 201, 198, 0.14);
+}
+.ds-goal__bar {
+  position: relative;
+  height: 12px;
+  margin: 12px 0 6px;
+  border-radius: 6px;
+  background: var(--el-fill-color, #ebeef5);
+}
+.ds-goal__bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #40c9c6, #0f6a4f);
+}
+.ds-goal__bar em {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 20px;
+  background: #e6a23c;
+  transform: translateX(-1px);
+}
+.ds-goal__bar em::after {
+  content: '预测';
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-style: normal;
+  color: #e6a23c;
+  white-space: nowrap;
+}
+.ds-goal__sub {
+  font-size: 12px;
+  color: var(--ui-muted, #9ca3af);
+}
+.ds-goal__sub b {
+  color: var(--ui-text, #111827);
+}
+.ds-goal__side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 170px;
+}
+.ds-goal__num {
+  font-size: 20px;
+  color: var(--ui-text, #111827);
+  font-variant-numeric: tabular-nums;
+}
+.ds-goal__side small {
+  font-size: 11px;
+  font-weight: 600;
+}
+.ds-goal__muted {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ui-muted, #9ca3af);
+}
+.is-up {
+  color: #16a34a;
+}
+.is-down {
+  color: #dc2626;
+}
+.is-flat {
+  color: var(--ui-muted, #6b7280);
+}
+@media (max-width: 1099px) {
+  .ds-goal-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  }
+}
+@media (max-width: 767px) {
+  .ds-goal-row,
+  .ds-goal {
+    grid-template-columns: 1fr;
+  }
+  .ds-goal {
+    gap: 10px;
+  }
+}
+.ds-panel-sub {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ui-muted, #9ca3af);
+}
+.ds-panel-pick {
+  width: 160px;
+  margin-left: auto;
+}
+.ds-4m-sum {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ui-muted, #9ca3af);
+}
+.ds-4m-sum b {
+  color: var(--ui-text, #111827);
+  font-variant-numeric: tabular-nums;
+}
+.ds-4m-sum i {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  margin-right: 5px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+.ds-cmp-table {
+  overflow-x: auto;
+}
+.ds-cmp-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: var(--ui-text-2, #606266);
+}
+.ds-cmp-table th {
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  color: var(--ui-muted, #909399);
+  border-bottom: 1px solid var(--el-border-color-lighter, #ebeef5);
+  white-space: nowrap;
+}
+.ds-cmp-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--el-border-color-lighter, #ebeef5);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ds-cmp-table .r {
+  text-align: right;
+}
+.ds-cmp-table tr.sum td {
+  font-weight: 700;
+  color: var(--ui-text, #303133);
+  background: var(--el-fill-color-light, #f5f7fa);
+}
+.ds-panel--rank-sm :deep(.el-card__body) {
+  height: 232px;
+  max-height: 232px;
+}
 /* Panel cards */
 .ds-panel {
   height: 100%;

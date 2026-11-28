@@ -1,6 +1,11 @@
-"""数据大屏：收款周期 KPI、成员对比、渠道联动；本月/历史趋势固定展示。"""
+"""数据大屏：收款周期 KPI、成员对比、渠道联动；本月/历史趋势固定展示。
+
+对比口径：进行中的周期（本月 / 本周 / 年度）都和「同期」比——本月 1 日到今天 对比 上月 1 日到同一天；
+上月（已结束）对比前一个整月。
+"""
 from __future__ import annotations
 
+import calendar
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
@@ -8,8 +13,8 @@ from django.contrib.auth import get_user_model
 from django.db.models import Case, Count, DecimalField, F, Q, Sum, When
 from django.utils import timezone
 
-from backend.apps.catalog.models import PaymentRecord, WechatBotRecord
-from backend.apps.catalog.roles import BOSS_GROUP_NAME, CEO_GROUP_NAME, GUEST_GROUP_NAME
+from backend.apps.catalog.models import MonthlyGmvTarget, PaymentRecord, WechatBotRecord
+from backend.apps.catalog.roles import BOSS_GROUP_NAME, CEO_GROUP_NAME, GUEST_GROUP_NAME, is_boss, is_ceo, is_guest
 
 _PAYMENT_REFUND_CHANNEL = "退款项"
 _CHANNEL_SHILEI = "十类收款"
@@ -29,7 +34,6 @@ _BOT_BUSINESS_DEFS = (
     ("mega", "mega", "sku"),
     ("chatgpt", "gpt", "sku"),
     ("once_card", "一次卡", "qty"),
-    ("remote", "远程", "amount"),
 )
 # 仅排除已作废；ACTIVE(未清空) / PROCESSED(已清空) 都计入
 _BOT_EXCLUDED_STATUS = ("REVERSED", "DELETED", "VOID")
@@ -90,7 +94,7 @@ def _bot_period_qs(date_from: date | None, date_to: date | None):
 
 def _bot_business_metrics(date_from: date | None, date_to: date | None) -> list[dict]:
     """
-    各业务 KPI：数量表/多SKU → quantity 合计；USDT → amount_usd 合计；远程 → 金额合计。
+    各业务 KPI：数量表/多SKU → quantity 合计；USDT → amount_usd 合计。
     """
     rows = (
         _bot_period_qs(date_from, date_to)
@@ -130,8 +134,10 @@ def _attach_bot_change(cur_rows: list[dict], prev_rows: list[dict] | None) -> li
         item = dict(row)
         if prev_rows is None:
             item["change_pct"] = None
+            item["prev_value"] = None
         else:
             item["change_pct"] = _pct_change(row.get("value"), prev_map.get(row["key"]))
+            item["prev_value"] = prev_map.get(row["key"], 0)
         out.append(item)
     return out
 
@@ -184,13 +190,18 @@ def _attach_change_metrics(summary: dict, prev_summary: dict | None):
         ("pixivcoban_change_pct", "pixivcoban_count"),
         ("chatgptplus_change_pct", "chatgptplus_count"),
         ("usdt_change_pct", "usdt_amount"),
+        ("aov_change_pct", "aov"),
     )
     if not prev_summary:
         for pct_key, _ in keys:
             out[pct_key] = None
+        out["prev_total_gmv"] = out["prev_order_count"] = out["prev_aov"] = None
         return out
     for pct_key, field in keys:
         out[pct_key] = _pct_change(summary.get(field), prev_summary.get(field))
+    out["prev_total_gmv"] = prev_summary.get("total_gmv")
+    out["prev_order_count"] = prev_summary.get("order_count")
+    out["prev_aov"] = prev_summary.get("aov")
     return out
 
 
@@ -358,20 +369,187 @@ def _staff_daily(date_from, date_to):
     }
 
 
-def _build_period_block(date_from, date_to, prev_summary=None, prev_bot=None):
+def _shift_months(d: date, n: int) -> date:
+    """d 所在月往前/后 n 个月的 1 日。"""
+    idx = d.year * 12 + (d.month - 1) + n
+    return date(idx // 12, idx % 12 + 1, 1)
+
+
+def _month_days(d: date) -> int:
+    return calendar.monthrange(d.year, d.month)[1]
+
+
+def _safe_replace_year(d: date, year: int) -> date:
+    try:
+        return d.replace(year=year)
+    except ValueError:  # 2 月 29 日 → 28 日
+        return d.replace(year=year, day=28)
+
+
+def same_period_prev(kind: str, date_from: date, date_to: date) -> tuple[date, date]:
+    """同期区间。month：上月 1 日 ~ 上月同一天（上月没有这一天就到上月最后一天）。"""
+    if kind == "month":
+        start = _shift_months(date_from, -1)
+        end = start + (date_to - date_from)
+        last = start.replace(day=_month_days(start))
+        return start, min(end, last)
+    if kind == "week":
+        return date_from - timedelta(days=7), date_to - timedelta(days=7)
+    if kind == "year":
+        return _safe_replace_year(date_from, date_from.year - 1), _safe_replace_year(date_to, date_to.year - 1)
+    raise ValueError(kind)
+
+
+def _staff_compare(cur_staff: list[dict], prev_staff: list[dict]) -> list[dict]:
+    """各成员 本周期 vs 同期 GMV（两边都为 0 的不列）。"""
+    prev_map = {r["user__username"]: r.get("gmv") or 0 for r in prev_staff}
+    rows, seen = [], set()
+    for r in cur_staff:
+        name = r["user__username"]
+        seen.add(name)
+        rows.append({"user__username": name, "gmv": r.get("gmv") or 0, "prev_gmv": prev_map.get(name, 0)})
+    for name, v in prev_map.items():
+        if name not in seen:
+            rows.append({"user__username": name, "gmv": 0, "prev_gmv": v})
+    rows = [r for r in rows if r["gmv"] or r["prev_gmv"]]
+    for r in rows:
+        r["change_pct"] = _pct_change(r["gmv"], r["prev_gmv"])
+    rows.sort(key=lambda x: (-(x["gmv"] or 0), x["user__username"] or ""))
+    return rows
+
+
+def month_goal(today: date | None = None) -> dict:
+    """本月目标 + 月底预测。预测 = 1 日到昨天已收 + 昨天为止日均 × 剩余天数（含今天）。"""
+    today = today or timezone.localdate()
+    month_start = today.replace(day=1)
+    dim = _month_days(today)
+    days_left = dim - today.day + 1
+
+    def _gmv(d0, d1):
+        if d1 < d0:
+            return 0.0
+        return _money_two_decimals(_payment_records_net_sales_sum(_exclude_boss_ceo_payments(
+            PaymentRecord.objects.filter(record_date__gte=d0, record_date__lte=d1))))
+
+    gmv = _gmv(month_start, today)
+    before_today = _gmv(month_start, today - timedelta(days=1))
+    if today.day > 1:
+        avg = round(before_today / (today.day - 1), 2)
+        forecast = round(before_today + avg * days_left, 2)
+    else:
+        avg = forecast = None
+
+    t = MonthlyGmvTarget.objects.filter(month=month_start).first()
+    target = _money_two_decimals(t.target) if t else None
+    out = {
+        "month": month_start.strftime("%Y-%m"),
+        "target": target,
+        "gmv": gmv,
+        "days_in_month": dim,
+        "days_left": days_left,
+        "avg_daily": avg,
+        "forecast": forecast,
+        "done_pct": None,
+        "forecast_pct": None,
+        "per_day_needed": None,
+    }
+    if target:
+        out["done_pct"] = round(gmv / target * 100, 1)
+        out["per_day_needed"] = round(max(target - gmv, 0) / days_left, 2)
+        if forecast is not None:
+            out["forecast_pct"] = round(forecast / target * 100, 1)
+    return out
+
+
+def _can_see_everyone(user) -> bool:
+    return bool(user and user.is_authenticated and (user.is_superuser or is_boss(user) or is_ceo(user)))
+
+
+def daily_four_months(user=None, today: date | None = None) -> dict:
+    """每日收款 · 本月和近 3 个月（按每月 1–31 日对齐）。
+
+    管理员 / 老板 / CEO：全部 + 每个成员；普通员工：全部 + 自己（默认自己）；游客：只有全部。
+    """
+    today = today or timezone.localdate()
+    starts = [_shift_months(today, -i) for i in range(4)]  # 本月, 上月, ...
+    months = []
+    for i, m0 in enumerate(starts):
+        dim = _month_days(m0)
+        months.append({
+            "key": m0.strftime("%Y-%m"),
+            "label": f"{m0.month}月" + ("（本月）" if i == 0 else ""),
+            "days": dim,
+            "upto": today.day if i == 0 else dim,
+        })
+
+    everyone = _can_see_everyone(user)
+    guest = bool(user and user.is_authenticated and is_guest(user)) or not (user and user.is_authenticated)
+    qs = _exclude_boss_ceo_payments(
+        PaymentRecord.objects.filter(record_date__gte=starts[-1], record_date__lte=today)
+    )
+    by_user = defaultdict(lambda: defaultdict(float))
+    total = defaultdict(float)
+    names = {}
+    for rd, uid, uname, ch, amt in qs.values_list("record_date", "user_id", "user__username", "channel", "amount"):
+        day = rd.date() if hasattr(rd, "date") else rd
+        v = (-1.0 if ch == _PAYMENT_REFUND_CHANNEL else 1.0) * float(amt or 0)
+        total[day] += v
+        if uid is not None:
+            by_user[uid][day] += v
+            names[uid] = (uname or "").strip() or "未知"
+
+    def _series(day_map):
+        out = []
+        for m0, m in zip(starts, months):
+            out.append([round(day_map.get(m0.replace(day=d), 0.0), 2) for d in range(1, m["upto"] + 1)])
+        return out
+
+    options = [{"key": "all", "name": "全部"}]
+    series = {"all": _series(total)}
+    default = "all"
+    if everyone:
+        for uid in sorted(by_user, key=lambda u: -sum(by_user[u].values())):
+            options.append({"key": str(uid), "name": names[uid]})
+            series[str(uid)] = _series(by_user[uid])
+    elif not guest:
+        key = str(user.pk)
+        options.append({"key": key, "name": f"我自己（{(user.username or '').strip()}）"})
+        series[key] = _series(by_user.get(user.pk, {}))
+        default = key
+    return {"months": months, "options": options, "series": series, "default": default}
+
+
+def _range_summary(d0, d1):
+    return data_screen_range_summary(
+        _exclude_boss_ceo_payments(PaymentRecord.objects.filter(record_date__gte=d0, record_date__lte=d1)),
+        date_from=d0,
+        date_to=d1,
+    )
+
+
+def _build_period_block(date_from, date_to, prev_range=None, cmp_label=""):
+    """prev_range=(起, 止)：对比区间（同期）。"""
     qs = _exclude_boss_ceo_payments(
         PaymentRecord.objects.filter(record_date__gte=date_from, record_date__lte=date_to)
     )
+    prev_summary = _range_summary(*prev_range) if prev_range else None
+    prev_bot = _bot_business_metrics(*prev_range) if prev_range else None
     summary = _attach_change_metrics(
         data_screen_range_summary(qs, date_from=date_from, date_to=date_to),
         prev_summary,
     )
     summary["date_from"] = date_from.isoformat()
     summary["date_to"] = date_to.isoformat()
+    summary["cmp_label"] = cmp_label
+    summary["cmp_from"] = prev_range[0].isoformat() if prev_range else None
+    summary["cmp_to"] = prev_range[1].isoformat() if prev_range else None
     bot_business = _attach_bot_change(_bot_business_metrics(date_from, date_to), prev_bot)
+    staff = data_screen_staff_metrics(date_from, date_to)
+    staff_compare = _staff_compare(staff, data_screen_staff_metrics(*prev_range)) if prev_range else []
     return {
         "summary": summary,
-        "staff": data_screen_staff_metrics(date_from, date_to),
+        "staff": staff,
+        "staff_compare": staff_compare,
         "channel_rank_list": _channel_rank_list(qs),
         "channel_amount_bar": _channel_amount_bar(qs),
         "staff_daily": _staff_daily(date_from, date_to),
@@ -386,43 +564,21 @@ def build_data_screen_payload(user=None):
     year_start = today.replace(month=1, day=1)
     prev_month_end = month_start - timedelta(days=1)
     prev_month_start = prev_month_end.replace(day=1)
-    prev_week_end = start_week - timedelta(days=1)
-    prev_week_start = prev_week_end - timedelta(days=6)
-    prev_year_start = year_start.replace(year=year_start.year - 1)
-    prev_year_end = year_start - timedelta(days=1)
     prev2_end = prev_month_start - timedelta(days=1)
     prev2_start = prev2_end.replace(day=1)
 
-    def _prev_summary(d0, d1):
-        return data_screen_range_summary(
-            _exclude_boss_ceo_payments(
-                PaymentRecord.objects.filter(record_date__gte=d0, record_date__lte=d1)
-            ),
-            date_from=d0,
-            date_to=d1,
-        )
-
-    prev_month_summary = _prev_summary(prev_month_start, prev_month_end)
-    prev_week_summary = _prev_summary(prev_week_start, prev_week_end)
-    prev_year_summary = _prev_summary(prev_year_start, prev_year_end)
-    prev2_summary = _prev_summary(prev2_start, prev2_end)
-
-    prev_month_bot = _bot_business_metrics(prev_month_start, prev_month_end)
-    prev_week_bot = _bot_business_metrics(prev_week_start, prev_week_end)
-    prev_year_bot = _bot_business_metrics(prev_year_start, prev_year_end)
-    prev2_bot = _bot_business_metrics(prev2_start, prev2_end)
-
     month_block = _build_period_block(
-        month_start, today, prev_summary=prev_month_summary, prev_bot=prev_month_bot
+        month_start, today, prev_range=same_period_prev("month", month_start, today), cmp_label="上月同期"
     )
+    month_block["goal"] = month_goal(today)
     week_block = _build_period_block(
-        start_week, today, prev_summary=prev_week_summary, prev_bot=prev_week_bot
+        start_week, today, prev_range=same_period_prev("week", start_week, today), cmp_label="上周同期"
     )
     prev_month_block = _build_period_block(
-        prev_month_start, prev_month_end, prev_summary=prev2_summary, prev_bot=prev2_bot
+        prev_month_start, prev_month_end, prev_range=(prev2_start, prev2_end), cmp_label="前月"
     )
     year_block = _build_period_block(
-        year_start, today, prev_summary=prev_year_summary, prev_bot=prev_year_bot
+        year_start, today, prev_range=same_period_prev("year", year_start, today), cmp_label="去年同期"
     )
 
     month_qs = _exclude_boss_ceo_payments(
@@ -439,6 +595,7 @@ def build_data_screen_payload(user=None):
         # 固定图表（不受本月/本周/上月/年度筛选）
         "month_sales_trend": month_sales_trend,
         "history_month_gmv": history_month_gmv,
+        "daily_4m": daily_four_months(user, today),
         # 兼容旧字段
         "channel_rank_list": month_block["channel_rank_list"],
         "channel_amount_bar": month_block["channel_amount_bar"],
