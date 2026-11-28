@@ -59,6 +59,9 @@ function fmtPct(v: any) {
   const sign = n > 0 ? '+' : ''
   return `${sign}${n.toFixed(2)}%`
 }
+// 涨红跌绿（一路长虹）
+const UP_COLOR = '#dc2626'
+const DOWN_COLOR = '#16a34a'
 function deltaTone(delta: any) {
   const n = Number(delta)
   if (!Number.isFinite(n) || n === 0) return 'flat'
@@ -550,7 +553,7 @@ function renderPeriodCharts() {
         const r = cmp[ps?.[0]?.dataIndex ?? 0]
         if (!r) return ''
         const pct = fmtPct(r.change_pct)
-        const color = safeNum(r.change_pct) >= 0 ? '#16a34a' : '#dc2626'
+        const color = safeNum(r.change_pct) >= 0 ? UP_COLOR : DOWN_COLOR
         return `<b>${r.user__username}</b><br/>${def.label}：¥${fmt(r.gmv)}<br/>${cmpName}：¥${fmt(r.prev_gmv)}<br/>增长：<span style="color:${color}">${pct}</span>`
       }
     },
@@ -576,7 +579,7 @@ function renderPeriodCharts() {
             const n = safeNum(v)
             return `{${n >= 0 ? 'u' : 'd'}|${n > 0 ? '+' : ''}${n.toFixed(1)}%}`
           },
-          rich: { u: { color: '#16a34a', fontWeight: 700 }, d: { color: '#dc2626', fontWeight: 700 } }
+          rich: { u: { color: UP_COLOR, fontWeight: 700 }, d: { color: DOWN_COLOR, fontWeight: 700 } }
         }
       },
       {
@@ -939,7 +942,7 @@ onBeforeUnmount(() => {
                 <b class="ds-goal__num">¥{{ fmt(goal.forecast) }}</b>
                 <small
                   v-if="goal.target"
-                  :class="safeNum(goal.forecast_pct) >= 100 ? 'is-up' : 'is-down'"
+                  :class="safeNum(goal.forecast_pct) >= 100 ? 'is-up' : 'is-short'"
                 >
                   {{ safeNum(goal.forecast_pct) >= 100 ? '预计完成' : `预计差 ¥${fmt(goal.target - goal.forecast)}` }}（{{ goal.forecast_pct }}%）
                 </small>
@@ -1469,11 +1472,11 @@ onBeforeUnmount(() => {
 }
 
 .kpi-tile__delta.is-up {
-  color: #16a34a;
+  color: #dc2626;
 }
 
 .kpi-tile__delta.is-down {
-  color: #dc2626;
+  color: #16a34a;
 }
 
 .kpi-tile__delta.is-flat {
@@ -1622,11 +1625,15 @@ onBeforeUnmount(() => {
   font-weight: 400;
   color: var(--ui-muted, #9ca3af);
 }
+/* 涨红跌绿（一路长虹） */
 .is-up {
-  color: #16a34a;
+  color: #dc2626;
 }
 .is-down {
-  color: #dc2626;
+  color: #16a34a;
+}
+.is-short {
+  color: #d97706;
 }
 .is-flat {
   color: var(--ui-muted, #6b7280);
