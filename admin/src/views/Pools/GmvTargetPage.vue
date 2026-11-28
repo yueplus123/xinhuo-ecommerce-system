@@ -115,11 +115,11 @@ onMounted(load)
   color: var(--el-text-color-secondary);
 }
 .ok {
-  color: #16a34a;
+  color: #dc2626;
   font-weight: 700;
 }
 .bad {
-  color: #dc2626;
+  color: #16a34a;
   font-weight: 700;
 }
 </style>
